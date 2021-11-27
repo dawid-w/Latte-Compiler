@@ -30,7 +30,8 @@ compile program = do
 
 compileProgram :: Program -> Compl Val
 compileProgram (Program topDefs) = do
-  result <- addDefs topDefs
+  _ <- addDefs topDefs
+  result <- compileDefs topDefs
   env <- get
   case Map.lookup (Ident "main") env of
     Nothing -> do throwError "No main function"
@@ -51,8 +52,56 @@ addDef (FnDef retType ident args block) = do
     (Just _) -> throwError "Name is already taken"
     Nothing -> do
       --   TODO: Array of types
-      let newEnv = Map.insert ident (Fun retType []) env
-      put newEnv
+      put $ Map.insert ident (Fun retType []) env
       return ""
 
-compileFunc ::
+compileDefs :: [TopDef] -> Compl Val
+compileDefs [] = do return ""
+compileDefs (def : defs) = do
+  result <- compileDef def
+  results <- compileDefs defs
+  return (result ++ "," ++ results)
+
+compileDef :: TopDef -> Compl Val
+compileDef (FnDef retType ident args block) = do
+  env <- get
+  -- Add args decl
+  loopArgs args
+  -- Go through func
+  let (Block stmts) = block
+  compileStmts stmts
+  -- block
+  --
+  put env
+  return ""
+
+compileStmts :: [Stmt] -> Compl Val
+compileStmts [] = do return ""
+compileStmts (stmt : stmts) = do
+  result <- compileStmt stmt
+  results <- compileStmts stmts
+  return ""
+
+compileStmt :: Stmt -> Compl Val
+compileStmt (Incr ident) = do
+  env <- get
+  case Map.lookup ident env of
+    (Just _) -> do return ""
+    Nothing -> throwError $ show ident ++ " is not declared"
+compileStmt _ = do return ""
+
+loopArgs :: [Arg] -> Compl Val
+loopArgs [] = do return ""
+loopArgs (arg : args) = do
+  let (Arg argType ident) = arg
+  addVar argType ident
+  return ""
+
+addVar :: Type -> Ident -> Compl Val
+addVar varType ident = do
+  env <- get
+  case Map.lookup ident env of
+    (Just _) -> throwError $ "Name " ++ show ident ++ "is already taken"
+    Nothing -> do
+      put $ Map.insert ident varType env
+      return ""
