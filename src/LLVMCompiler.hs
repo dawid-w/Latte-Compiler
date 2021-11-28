@@ -84,11 +84,26 @@ compileStmts (stmt : stmts) = do
 
 compileStmt :: Stmt -> Compl Val
 compileStmt (Incr ident) = do
+  _ <- assertOfType ident Int
+  env <- get
+  return ""
+compileStmt _ = do return ""
+
+assertOfType :: Ident -> Type -> Compl Val
+assertOfType ident expectedType = do
+  env <- get
+  case Map.lookup ident env of
+    (Just varType) -> do
+      unless (varType == expectedType) $ throwError $ "Variable" ++ show ident ++ " should be of type " ++ show expectedType
+      return ""
+    Nothing -> throwError $ show ident ++ " is not declared"
+
+assertDecl :: Ident -> Compl Val
+assertDecl ident = do
   env <- get
   case Map.lookup ident env of
     (Just _) -> do return ""
     Nothing -> throwError $ show ident ++ " is not declared"
-compileStmt _ = do return ""
 
 loopArgs :: [Arg] -> Compl Val
 loopArgs [] = do return ""
