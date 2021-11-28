@@ -1,0 +1,10 @@
+
+int add (string x, int x) {
+  return 0 ;
+}
+
+
+int main () {
+  printString("hello world") ;
+  return 0 ;
+}

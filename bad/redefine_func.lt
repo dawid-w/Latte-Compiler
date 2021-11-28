@@ -1,0 +1,12 @@
+
+int add () {
+  return 0 ;
+}
+
+void add () {
+}
+
+int main () {
+  printString("hello world") ;
+  return 0 ;
+}
