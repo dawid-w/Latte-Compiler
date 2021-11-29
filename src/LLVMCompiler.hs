@@ -6,7 +6,7 @@ import Data.Map as Map
 import Language.Haskell.TH (varT)
 import Latte.Abs
 import Text.Parsec.Token (GenLanguageDef (identLetter))
-import Types (CType (CBool, CFun, CInt, CStr), Pos, getCType)
+import Types (CType (CBool, CFun, CInt, CStr, CVoid), Pos, getCType)
 import Prelude
 
 type Env = (Map Ident CType)
@@ -42,11 +42,11 @@ compileProgram (Program pos topDefs) = do
   result <- compileDefs topDefs
   env <- get
   case Map.lookup (Ident "main") env of
-    Nothing -> do printError Nothing "No main function"
-    Just main -> do return ""
+    Nothing -> printError Nothing "No main function"
+    Just main -> return ""
 
 addDefs :: [TopDef] -> Compl Val
-addDefs [] = do return ""
+addDefs [] = return ""
 addDefs (def : defs) = do
   result <- addDef def
   results <- addDefs defs
@@ -65,7 +65,7 @@ getArgType :: Arg -> CType
 getArgType (Arg pos argType ident) = getCType argType
 
 compileDefs :: [TopDef] -> Compl Val
-compileDefs [] = do return ""
+compileDefs [] = return ""
 compileDefs (def : defs) = do
   result <- compileDef def
   results <- compileDefs defs
@@ -81,15 +81,15 @@ compileDef (FnDef pos retType ident args block) = do
   return ""
 
 compileStmts :: [Stmt] -> Compl Val
-compileStmts [] = do return ""
+compileStmts [] = return ""
 compileStmts (stmt : stmts) = do
   result <- compileStmt stmt
   results <- compileStmts stmts
   return ""
 
 initVar :: Pos -> CType -> [Item] -> Compl Val
-initVar pos varType [] = do return ""
-initVar p1 varType ((NoInit p2 ident) : items) = do
+initVar pos varType [] = return ""
+initVar p1 varType ((NoInit p2 ident) : items) =
   addVar p1 varType ident
 initVar p1 varType ((Init p2 ident expr) : items) = do
   addVar p1 varType ident
@@ -100,7 +100,7 @@ compileStmt (Empty pos) = return ""
 compileStmt (BStmt pos block) = do
   let (Block pos stmts) = block
   compileStmts stmts
-compileStmt (Decl pos varType items) = do
+compileStmt (Decl pos varType items) =
   initVar pos (getCType varType) items
 compileStmt (Ass pos ident expr) = do
   varType <- assertDecl pos ident
@@ -109,13 +109,38 @@ compileStmt (Incr pos ident) = assertVarType pos ident CInt
 compileStmt (Decr pos ident) = assertVarType pos ident CInt
 -- compileStmt (Ret pos expr) = return ""
 -- compileStmt (VRet) = return ""
--- compileStmts (Cond pos expr stmt)
--- compileStmts (CondElse pos expr stmt1 stmt2)
--- compileStmts (While pos expr stmt)
--- compileStmts (SExp pos expr)
-compileStmt _ = do
-  -- throwError $ show x
+compileStmt (Cond pos expr stmt) = do
+  assertExprType expr CBool
+  compileStmt stmt
+compileStmt (CondElse pos expr stmt1 stmt2) = do
+  assertExprType expr CBool
+  compileStmt stmt1
+  compileStmt stmt2
+compileStmt (While pos expr stmt) = do
+  assertExprType expr CBool
+  compileStmt stmt
+compileStmt (SExp pos expr) = do
+  expType <- getExprType expr
+  assertExprType expr expType
+compileStmt _ =
   return ""
+
+getExprType :: Expr -> Compl CType
+getExprType (EVar pos ident) = do
+  assertDecl pos ident
+getExprType (ELitInt pos _) = return CBool
+getExprType (ELitTrue pos) = return CBool
+getExprType (ELitFalse pos) = return CBool
+getExprType (EOr pos e1 e2) = return CBool
+getExprType (EAnd pos e1 e2) = return CBool
+getExprType (ERel pos e1 op e2) = return CBool
+getExprType (EAdd pos e1 op e2) = return CInt
+getExprType (EMul pos e1 op e2) = return CInt
+getExprType (Not pos expr) = return CBool
+getExprType (Neg pos expr) = return CInt
+getExprType (EString pos string) = return CStr
+getExprType (EApp pos ident exprs) = do
+  assertDecl pos ident
 
 assertExprType :: Expr -> CType -> Compl Val
 assertExprType (EVar pos ident) exprType = assertVarType pos ident exprType
@@ -138,9 +163,9 @@ assertExprType (EAdd pos e1 op e2) CInt = do
 assertExprType (EMul pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
-assertExprType (Not pos expr) CBool = do
+assertExprType (Not pos expr) CBool =
   assertExprType expr CBool
-assertExprType (Neg pos expr) CInt = do
+assertExprType (Neg pos expr) CInt =
   assertExprType expr CInt
 assertExprType (EString pos string) CStr = return ""
 assertExprType (EApp pos ident exprs) expectedType = do
@@ -175,11 +200,11 @@ assertDecl :: Pos -> Ident -> Compl CType
 assertDecl pos ident = do
   env <- get
   case Map.lookup ident env of
-    (Just varType) -> do return varType
+    (Just varType) -> return varType
     Nothing -> printError pos $ show ident ++ " is not declared"
 
 loopArgs :: [Arg] -> Compl Val
-loopArgs [] = do return ""
+loopArgs [] = return ""
 loopArgs (arg : args) = do
   let (Arg pos argType ident) = arg
   addVar pos (getCType argType) ident
