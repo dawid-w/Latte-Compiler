@@ -97,7 +97,9 @@ initVar p1 varType ((Init p2 ident expr) : items) = do
 
 compileStmt :: Stmt -> Compl Val
 compileStmt (Empty pos) = return ""
--- compileStmt (BStmt block) = return ""
+compileStmt (BStmt pos block) = do
+  let (Block pos stmts) = block
+  compileStmts stmts
 compileStmt (Decl pos varType items) = do
   initVar pos (getCType varType) items
 compileStmt (Ass pos ident expr) = do
@@ -105,10 +107,13 @@ compileStmt (Ass pos ident expr) = do
   assertExprType expr varType
 compileStmt (Incr pos ident) = assertVarType pos ident CInt
 compileStmt (Decr pos ident) = assertVarType pos ident CInt
--- compileStmt (Ret expr) = return ""
+-- compileStmt (Ret pos expr) = return ""
 -- compileStmt (VRet) = return ""
-
-compileStmt x = do
+-- compileStmts (Cond pos expr stmt)
+-- compileStmts (CondElse pos expr stmt1 stmt2)
+-- compileStmts (While pos expr stmt)
+-- compileStmts (SExp pos expr)
+compileStmt _ = do
   -- throwError $ show x
   return ""
 
@@ -142,10 +147,20 @@ assertExprType (EApp pos ident exprs) expectedType = do
   storedType <- assertDecl pos ident
   case storedType of
     (CFun retType argTypes) ->
-      if retType == expectedType then return "" else printError pos $ "Function" ++ show ident ++ " should return " ++ show expectedType
+      if retType /= expectedType
+        then printError pos $ "Function" ++ show ident ++ " should return " ++ show expectedType
+        else checkArgTypes pos argTypes exprs
     _ -> printError pos $ show ident ++ " should be a function "
   return ""
 assertExprType expr expedtedType = printError (hasPosition expr) $ "Expresion should be of type " ++ show expedtedType
+
+checkArgTypes :: Pos -> [CType] -> [Expr] -> Compl Val
+checkArgTypes pos [] [] = return ""
+checkArgTypes pos (argType : argTypes) (expr : exprs) = do
+  assertExprType expr argType
+  checkArgTypes pos argTypes exprs
+checkArgTypes pos [] exprs = printError pos $ " expected " ++ show (length exprs) ++ " less arguments"
+checkArgTypes pos args [] = printError pos $ " expected " ++ show (length args) ++ " more arguments"
 
 assertVarType :: Pos -> Ident -> CType -> Compl Val
 assertVarType pos ident expectedType = do
