@@ -283,5 +283,5 @@ addVar pos varType ident = do
       put $ Map.insert ident (varType, False) env
       return ""
     Nothing -> do
-      put $ Map.insert ident (varType, True) env
+      put $ Map.insert ident (varType, False) env
       return ""
