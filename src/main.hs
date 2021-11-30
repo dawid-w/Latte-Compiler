@@ -5,14 +5,22 @@ import Latte.Abs
 import Latte.Par
 import System.Environment (getArgs)
 import System.FilePath (dropExtension, replaceExtension, takeDirectory, takeFileName)
+import System.IO (hPrint, hPutStr, hPutStrLn, stderr)
 import System.Process
 import Text.Parsec.Prim (putState)
+
+helpStr :: String
+helpStr =
+  "---- Latte compiler ----\n\n"
+    ++ "Compile latte file:\n"
+    ++ "./latc <filename>\n\n"
+    ++ "------------------------\n"
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["--help"] -> putStr "TODO\n"
+    ["--help"] -> putStr helpStr
     [filename] -> do
       code <- readFile filename
       let tokens = myLexer code
@@ -22,10 +30,10 @@ main = do
           result <- compile program
           case result of
             (Right text) -> do
-              putStrLn $ "OK: " ++ text
+              putStrLn "OK\n"
             (Left error) -> do
-              putStrLn error
+              hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
         Left error -> do
-          putStr ("Error while parsing:\n" ++ error ++ "\n")
+          hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
       return ()
-    _ -> putStr "<Help>\n"
+    _ -> putStr helpStr
