@@ -4,6 +4,7 @@ import LLVMCompiler
 import Latte.Abs
 import Latte.Par
 import System.Environment (getArgs)
+import System.Exit
 import System.FilePath (dropExtension, replaceExtension, takeDirectory, takeFileName)
 import System.IO (hPrint, hPutStr, hPutStrLn, stderr)
 import System.Process
@@ -31,9 +32,12 @@ main = do
           case result of
             (Right text) -> do
               putStrLn "OK\n"
+              exitSuccess
             (Left error) -> do
               hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
+              exitFailure
         Left error -> do
           hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
+          exitFailure
       return ()
     _ -> putStr helpStr
