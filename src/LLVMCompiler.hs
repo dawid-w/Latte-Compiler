@@ -84,13 +84,13 @@ compileDef (FnDef pos retType ident args block) = do
   env <- get
   loopArgs args
   let (Block pos stmts) = block
-  --   validRet <- checkReturn stmts (getCType retType)
-  if False
+  compileStmts (getCType retType) stmts
+  validRet <- checkReturn stmts (getCType retType)
+  if not validRet
     then printError pos $ "Function needs to return " ++ show (getCType retType)
-    else do
-      compileStmts (getCType retType) stmts
-      put env
-      return ""
+    else do return ""
+  put env
+  return ""
 
 compileStmts :: CType -> [Stmt] -> Compl Val
 compileStmts retType [] = return ""
@@ -109,39 +109,45 @@ initVar p1 varType ((Init p2 ident expr) : items) = do
   compileStmt CVoid (Ass p1 ident expr)
   initVar p1 varType items
 
--- checkReturn :: [Stmt] -> CType -> Compl Bool
--- checkReturn [] CVoid = return True
--- checkReturn [] expectedType = return False
--- checkReturn ((Ret pos expr) : stmts) expectedType = do
---   retType <- getExprType expr
---   if retType == expectedType
---     then do
---       res <- checkReturn stmts expectedType
---       return True
---     else printError pos $ "expedted " ++ show expectedType ++ " got " ++ show retType
--- checkReturn ((VRet pos) : stmts) CVoid = do
---   res <- checkReturn stmts CVoid
---   return True
--- checkReturn ((VRet pos) : stmts) expectedType = do
---   printError pos $ "expedted " ++ show expectedType ++ " got void"
--- checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
---   r1 <- checkReturn [stmt] expectedType
---   r2 <- checkReturn stmts expectedType
---   return (r1 || r2)
--- checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
---   r1 <- checkReturn [stmt1] expectedType
---   r2 <- checkReturn [stmt2] expectedType
---   r3 <- checkReturn stmts expectedType
---   return (r1 || r2 || r3)
--- checkReturn ((While pos expr stmt) : stmts) expectedType = do
---   r1 <- checkReturn [stmt] expectedType
---   r2 <- checkReturn stmts expectedType
---   return (r1 || r2)
--- checkReturn ((BStmt pos block) : stmts) expectedType = do
---   let (Block pos stmts) = block
---   checkReturn stmts expectedType
--- checkReturn (stmt : stmts) expectedType = do
---   checkReturn stmts expectedType
+checkReturn :: [Stmt] -> CType -> Compl Bool
+checkReturn [] CVoid = return True
+checkReturn [] expectedType = return False
+checkReturn ((Ret pos expr) : stmts) expectedType = do
+  retType <- getExprType expr
+  if retType == expectedType
+    then do
+      res <- checkReturn stmts expectedType
+      return True
+    else printError pos $ "expedted " ++ show expectedType ++ " got " ++ show retType
+checkReturn ((VRet pos) : stmts) CVoid = do
+  res <- checkReturn stmts CVoid
+  return True
+checkReturn ((VRet pos) : stmts) expectedType = do
+  printError pos $ "expedted " ++ show expectedType ++ " got void"
+checkReturn ((Cond pos (ELitFalse _) stmt) : stmts) expectedType = return False
+checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
+  r1 <- checkReturn [stmt] expectedType
+  r2 <- checkReturn stmts expectedType
+  return (r1 || r2)
+checkReturn ((CondElse pos (ELitFalse _) stmt1 stmt2) : stmts) expectedType = checkReturn [stmt2] expectedType
+checkReturn ((CondElse pos (ELitTrue _) stmt1 stmt2) : stmts) expectedType = checkReturn [stmt1] expectedType
+checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
+  r1 <- checkReturn [stmt1] expectedType
+  r2 <- checkReturn [stmt2] expectedType
+  r3 <- checkReturn stmts expectedType
+  return (r1 || r2 || r3)
+checkReturn ((While pos (ELitFalse _) stmt) : stmts) expectedType = return False
+checkReturn ((While pos expr stmt) : stmts) expectedType = do
+  r1 <- checkReturn [stmt] expectedType
+  r2 <- checkReturn stmts expectedType
+  return (r1 || r2)
+checkReturn ((BStmt pos block) : stmts) expectedType = do
+  let (Block pos bStmts) = block
+  r1 <- checkReturn bStmts expectedType
+  r2 <- checkReturn stmts expectedType
+  return (r1 || r2)
+checkReturn (stmt : stmts) expectedType = do
+  checkReturn stmts expectedType
 
 newContext :: (Ident, (CType, Bool)) -> (Ident, (CType, Bool))
 newContext (ident, (CFun retType args, modif)) = (ident, (CFun retType args, False))
