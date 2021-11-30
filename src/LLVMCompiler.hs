@@ -51,7 +51,10 @@ compileProgram (Program pos topDefs) = do
   env <- get
   case Map.lookup (Ident "main") env of
     Nothing -> printError Nothing "No main function"
-    Just main -> return ""
+    Just (CFun CInt [], _) -> return ""
+    Just (CFun CInt x, _) -> printError Nothing $ "Main should not have any arguments"
+    Just (CFun retType _, _) -> printError Nothing $ "Main needs to return int, not " ++ show retType
+    Just (r, _) -> printError Nothing "Main needs to be a function"
 
 addDefs :: [TopDef] -> Compl Val
 addDefs [] = return ""
@@ -63,8 +66,9 @@ addDefs (def : defs) = do
 addDef :: TopDef -> Compl Val
 addDef (FnDef pos retType ident args block) = do
   env <- get
+  let (Ident varName) = ident
   case Map.lookup ident env of
-    (Just (storedType, modif)) -> printError pos $ "Name" ++ show ident ++ " is already taken."
+    (Just (storedType, modif)) -> printError pos $ "Name" ++ varName ++ " is already taken."
     Nothing -> do
       put $ Map.insert ident (CFun (getCType retType) (Prelude.map getArgType args), False) env
       return ""
@@ -88,7 +92,7 @@ compileDef (FnDef pos retType ident args block) = do
   validRet <- checkReturn stmts (getCType retType)
   if not validRet
     then printError pos $ "Function needs to return " ++ show (getCType retType)
-    else do return ""
+    else return ""
   put env
   return ""
 
@@ -122,7 +126,7 @@ checkReturn ((Ret pos expr) : stmts) expectedType = do
 checkReturn ((VRet pos) : stmts) CVoid = do
   res <- checkReturn stmts CVoid
   return True
-checkReturn ((VRet pos) : stmts) expectedType = do
+checkReturn ((VRet pos) : stmts) expectedType =
   printError pos $ "expedted " ++ show expectedType ++ " got void"
 checkReturn ((Cond pos (ELitFalse _) stmt) : stmts) expectedType = return False
 checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
@@ -146,7 +150,7 @@ checkReturn ((BStmt pos block) : stmts) expectedType = do
   r1 <- checkReturn bStmts expectedType
   r2 <- checkReturn stmts expectedType
   return (r1 || r2)
-checkReturn (stmt : stmts) expectedType = do
+checkReturn (stmt : stmts) expectedType =
   checkReturn stmts expectedType
 
 newContext :: (Ident, (CType, Bool)) -> (Ident, (CType, Bool))
@@ -240,12 +244,13 @@ assertExprType (Neg pos expr) CInt =
 assertExprType (EString pos string) CStr = return ""
 assertExprType (EApp pos ident exprs) expectedType = do
   storedType <- assertDecl pos ident
+  let (Ident varName) = ident
   case storedType of
     (CFun retType argTypes) ->
       if retType /= expectedType
-        then printError pos $ "Function" ++ show ident ++ " should return " ++ show expectedType
+        then printError pos $ "Function" ++ varName ++ " should return " ++ show expectedType
         else checkArgTypes pos argTypes exprs
-    _ -> printError pos $ show ident ++ " should be a function "
+    _ -> printError pos $ varName ++ " should be a function "
   return ""
 assertExprType expr expedtedType = printError (hasPosition expr) $ "Expresion should be of type " ++ show expedtedType
 
@@ -260,18 +265,20 @@ checkArgTypes pos args [] = printError pos $ " expected " ++ show (length args) 
 assertVarType :: Pos -> Ident -> CType -> Compl Val
 assertVarType pos ident expectedType = do
   env <- get
+  let (Ident varName) = ident
   case Map.lookup ident env of
     (Just (varType, modif)) -> do
-      if varType == expectedType then return "" else printError pos $ "Variable" ++ show ident ++ " should be of type " ++ show expectedType
+      if varType == expectedType then return "" else printError pos $ "Variable" ++ varName ++ " should be of type " ++ show expectedType
       return ""
-    Nothing -> printError pos $ show ident ++ " is not declared"
+    Nothing -> printError pos $ varName ++ " is not declared"
 
 assertDecl :: Pos -> Ident -> Compl CType
 assertDecl pos ident = do
   env <- get
+  let (Ident varName) = ident
   case Map.lookup ident env of
     (Just (varType, modif)) -> return varType
-    Nothing -> printError pos $ show ident ++ " is not declared"
+    Nothing -> printError pos $ varName ++ " is not declared"
 
 loopArgs :: [Arg] -> Compl Val
 loopArgs [] = return ""
@@ -283,8 +290,9 @@ loopArgs (arg : args) = do
 addVar :: Pos -> CType -> Ident -> Compl Val
 addVar pos varType ident = do
   env <- get
+  let (Ident varName) = ident
   case Map.lookup ident env of
-    (Just (storedType, False)) -> printError pos $ "Name " ++ show ident ++ " is already defined"
+    (Just (storedType, False)) -> printError pos $ "Name " ++ varName ++ " is already defined"
     (Just (storedType, True)) -> do
       put $ Map.insert ident (varType, False) env
       return ""
