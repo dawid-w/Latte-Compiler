@@ -77,8 +77,8 @@ compileDef (FnDef pos retType ident args block) = do
   env <- get
   loopArgs args
   let (Block pos stmts) = block
-  validRet <- checkReturn stmts (getCType retType)
-  if not validRet
+  --   validRet <- checkReturn stmts (getCType retType)
+  if False
     then do
       printError pos $ "Function needs to return " ++ show (getCType retType)
     else do
@@ -95,45 +95,47 @@ compileStmts retType (stmt : stmts) = do
 
 initVar :: Pos -> CType -> [Item] -> Compl Val
 initVar pos varType [] = return ""
-initVar p1 varType ((NoInit p2 ident) : items) =
+initVar p1 varType ((NoInit p2 ident) : items) = do
   addVar p1 varType ident
+  initVar p1 varType items
 initVar p1 varType ((Init p2 ident expr) : items) = do
   addVar p1 varType ident
   compileStmt CVoid (Ass p1 ident expr)
+  initVar p1 varType items
 
-checkReturn :: [Stmt] -> CType -> Compl Bool
-checkReturn [] CVoid = return True
-checkReturn [] expectedType = return False
-checkReturn ((Ret pos expr) : stmts) expectedType = do
-  retType <- getExprType expr
-  if retType == expectedType
-    then do
-      res <- checkReturn stmts expectedType
-      return True
-    else printError pos $ "expedted " ++ show expectedType ++ " got " ++ show retType
-checkReturn ((VRet pos) : stmts) CVoid = do
-  res <- checkReturn stmts CVoid
-  return True
-checkReturn ((VRet pos) : stmts) expectedType = do
-  printError pos $ "expedted " ++ show expectedType ++ " got void"
-checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
-  r1 <- checkReturn [stmt] expectedType
-  r2 <- checkReturn stmts expectedType
-  return (r1 || r2)
-checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
-  r1 <- checkReturn [stmt1] expectedType
-  r2 <- checkReturn [stmt2] expectedType
-  r3 <- checkReturn stmts expectedType
-  return (r1 || r2 || r3)
-checkReturn ((While pos expr stmt) : stmts) expectedType = do
-  r1 <- checkReturn [stmt] expectedType
-  r2 <- checkReturn stmts expectedType
-  return (r1 || r2)
-checkReturn ((BStmt pos block) : stmts) expectedType = do
-  let (Block pos stmts) = block
-  checkReturn stmts expectedType
-checkReturn (stmt : stmts) expectedType = do
-  checkReturn stmts expectedType
+-- checkReturn :: [Stmt] -> CType -> Compl Bool
+-- checkReturn [] CVoid = return True
+-- checkReturn [] expectedType = return False
+-- checkReturn ((Ret pos expr) : stmts) expectedType = do
+--   retType <- getExprType expr
+--   if retType == expectedType
+--     then do
+--       res <- checkReturn stmts expectedType
+--       return True
+--     else printError pos $ "expedted " ++ show expectedType ++ " got " ++ show retType
+-- checkReturn ((VRet pos) : stmts) CVoid = do
+--   res <- checkReturn stmts CVoid
+--   return True
+-- checkReturn ((VRet pos) : stmts) expectedType = do
+--   printError pos $ "expedted " ++ show expectedType ++ " got void"
+-- checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
+--   r1 <- checkReturn [stmt] expectedType
+--   r2 <- checkReturn stmts expectedType
+--   return (r1 || r2)
+-- checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
+--   r1 <- checkReturn [stmt1] expectedType
+--   r2 <- checkReturn [stmt2] expectedType
+--   r3 <- checkReturn stmts expectedType
+--   return (r1 || r2 || r3)
+-- checkReturn ((While pos expr stmt) : stmts) expectedType = do
+--   r1 <- checkReturn [stmt] expectedType
+--   r2 <- checkReturn stmts expectedType
+--   return (r1 || r2)
+-- checkReturn ((BStmt pos block) : stmts) expectedType = do
+--   let (Block pos stmts) = block
+--   checkReturn stmts expectedType
+-- checkReturn (stmt : stmts) expectedType = do
+--   checkReturn stmts expectedType
 
 compileStmt :: CType -> Stmt -> Compl Val
 compileStmt retType (Empty pos) = return ""
@@ -183,7 +185,8 @@ getExprType (Not pos expr) = return CBool
 getExprType (Neg pos expr) = return CInt
 getExprType (EString pos string) = return CStr
 getExprType (EApp pos ident exprs) = do
-  assertDecl pos ident
+  (CFun retType args) <- assertDecl pos ident
+  return retType
 
 assertExprType :: Expr -> CType -> Compl Val
 assertExprType (EVar pos ident) exprType = assertVarType pos ident exprType
@@ -198,11 +201,15 @@ assertExprType (EAnd pos e1 e2) CBool = do
   assertExprType e2 CBool
   return ""
 assertExprType (ERel pos e1 op e2) CBool = do
-  assertExprType e1 CInt
-  assertExprType e2 CInt
+  retType <- getExprType e1
+  assertExprType e1 retType
+  assertExprType e2 retType
 assertExprType (EAdd pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
+assertExprType (EAdd pos e1 op e2) CStr = do
+  assertExprType e1 CStr
+  assertExprType e2 CStr
 assertExprType (EMul pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
