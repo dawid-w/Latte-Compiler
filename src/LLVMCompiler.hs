@@ -128,23 +128,31 @@ checkReturn ((VRet pos) : stmts) CVoid = do
   return True
 checkReturn ((VRet pos) : stmts) expectedType =
   printError pos $ "expedted " ++ show expectedType ++ " got void"
-checkReturn ((Cond pos (ELitFalse _) stmt) : stmts) expectedType = return False
-checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
+checkReturn ((Cond pos (ELitTrue _) stmt) : stmts) expectedType = do
   r1 <- checkReturn [stmt] expectedType
   r2 <- checkReturn stmts expectedType
   return (r1 || r2)
-checkReturn ((CondElse pos (ELitFalse _) stmt1 stmt2) : stmts) expectedType = checkReturn [stmt2] expectedType
-checkReturn ((CondElse pos (ELitTrue _) stmt1 stmt2) : stmts) expectedType = checkReturn [stmt1] expectedType
+checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
+  checkReturn stmts expectedType
+checkReturn ((CondElse pos (ELitFalse _) stmt1 stmt2) : stmts) expectedType = do
+  r2 <- checkReturn [stmt2] expectedType
+  r3 <- checkReturn stmts expectedType
+  return (r2 || r3)
+checkReturn ((CondElse pos (ELitTrue _) stmt1 stmt2) : stmts) expectedType = do
+  r1 <- checkReturn [stmt1] expectedType
+  r3 <- checkReturn stmts expectedType
+  return (r1 || r3)
 checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
   r1 <- checkReturn [stmt1] expectedType
   r2 <- checkReturn [stmt2] expectedType
   r3 <- checkReturn stmts expectedType
-  return (r1 || r2 || r3)
-checkReturn ((While pos (ELitFalse _) stmt) : stmts) expectedType = return False
-checkReturn ((While pos expr stmt) : stmts) expectedType = do
+  return ((r1 && r2) || r3)
+checkReturn ((While pos (ELitTrue _) stmt) : stmts) expectedType = do
   r1 <- checkReturn [stmt] expectedType
   r2 <- checkReturn stmts expectedType
   return (r1 || r2)
+checkReturn ((While pos expr stmt) : stmts) expectedType = do
+  checkReturn stmts expectedType
 checkReturn ((BStmt pos block) : stmts) expectedType = do
   let (Block pos bStmts) = block
   r1 <- checkReturn bStmts expectedType
