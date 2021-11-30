@@ -23,11 +23,18 @@ type Error = String
 type Compl a = ExceptT Error (StateT Env IO) a
 
 printError :: Pos -> String -> Compl a
-printError (Just (l, c)) text = throwError $ "Error at line " ++ show l ++ " column " ++ show c ++ ": " ++ text
-printError Nothing text = throwError $ "Error: " ++ text
+printError (Just (l, c)) text = throwError $ "error at line " ++ show l ++ " column " ++ show c ++ ": " ++ text
+printError Nothing text = throwError $ "error: " ++ text
 
 initEnv :: Env
-initEnv = Map.empty
+initEnv =
+  fromList
+    [ (Ident "printInt", CFun CVoid [CInt]),
+      (Ident "printString", CFun CVoid [CStr]),
+      (Ident "error", CFun CVoid []),
+      (Ident "readInt", CFun CInt []),
+      (Ident "readString", CFun CStr [])
+    ]
 
 compile :: Program -> IO (Either Error String)
 compile program = do
@@ -79,8 +86,7 @@ compileDef (FnDef pos retType ident args block) = do
   let (Block pos stmts) = block
   --   validRet <- checkReturn stmts (getCType retType)
   if False
-    then do
-      printError pos $ "Function needs to return " ++ show (getCType retType)
+    then printError pos $ "Function needs to return " ++ show (getCType retType)
     else do
       compileStmts (getCType retType) stmts
       put env
@@ -152,8 +158,8 @@ compileStmt retType (Decr pos ident) = assertVarType pos ident CInt
 compileStmt retType (Ret pos expr) = do
   r <- getExprType expr
   if retType == r
-    then do return ""
-    else do printError pos $ "Function should return " ++ show retType
+    then return ""
+    else printError pos $ "Function should return " ++ show retType
 compileStmt CVoid (VRet pos) = return ""
 compileStmt retType (VRet pos) = printError pos $ "Function should return " ++ show retType
 compileStmt retType (Cond pos expr stmt) = do
@@ -171,7 +177,7 @@ compileStmt retType (SExp pos expr) = do
   assertExprType expr expType
 
 getExprType :: Expr -> Compl CType
-getExprType (EVar pos ident) = do
+getExprType (EVar pos ident) =
   assertDecl pos ident
 getExprType (ELitInt pos _) = return CInt
 getExprType (ELitTrue pos) = return CBool
