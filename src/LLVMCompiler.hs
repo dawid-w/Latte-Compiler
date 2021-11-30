@@ -10,7 +10,7 @@ import Text.Read.Lex (expect)
 import Types (CType (CBool, CFun, CInt, CStr, CVoid), Pos, getCType)
 import Prelude
 
-type Env = (Map Ident CType)
+type Env = (Map Ident (CType, Bool))
 
 type Loc = Int
 
@@ -29,11 +29,11 @@ printError Nothing text = throwError $ "error: " ++ text
 initEnv :: Env
 initEnv =
   fromList
-    [ (Ident "printInt", CFun CVoid [CInt]),
-      (Ident "printString", CFun CVoid [CStr]),
-      (Ident "error", CFun CVoid []),
-      (Ident "readInt", CFun CInt []),
-      (Ident "readString", CFun CStr [])
+    [ (Ident "printInt", (CFun CVoid [CInt], False)),
+      (Ident "printString", (CFun CVoid [CStr], False)),
+      (Ident "error", (CFun CVoid [], False)),
+      (Ident "readInt", (CFun CInt [], False)),
+      (Ident "readString", (CFun CStr [], False))
     ]
 
 compile :: Program -> IO (Either Error String)
@@ -64,9 +64,9 @@ addDef :: TopDef -> Compl Val
 addDef (FnDef pos retType ident args block) = do
   env <- get
   case Map.lookup ident env of
-    (Just _) -> printError pos $ "Name" ++ show ident ++ " is already taken."
+    (Just (storedType, modif)) -> printError pos $ "Name" ++ show ident ++ " is already taken."
     Nothing -> do
-      put $ Map.insert ident (CFun (getCType retType) (Prelude.map getArgType args)) env
+      put $ Map.insert ident (CFun (getCType retType) (Prelude.map getArgType args), False) env
       return ""
 
 getArgType :: Arg -> CType
@@ -143,11 +143,19 @@ initVar p1 varType ((Init p2 ident expr) : items) = do
 -- checkReturn (stmt : stmts) expectedType = do
 --   checkReturn stmts expectedType
 
+newContext :: (Ident, (CType, Bool)) -> (Ident, (CType, Bool))
+newContext (ident, (CFun retType args, modif)) = (ident, (CFun retType args, False))
+newContext (ident, (storedType, modif)) = (ident, (storedType, True))
+
 compileStmt :: CType -> Stmt -> Compl Val
 compileStmt retType (Empty pos) = return ""
 compileStmt retType (BStmt pos block) = do
   let (Block pos stmts) = block
+  env <- get
+  put $ fromList $ Prelude.map newContext $ toList env
   compileStmts retType stmts
+  put env
+  return ""
 compileStmt retType (Decl pos varType items) =
   initVar pos (getCType varType) items
 compileStmt retType (Ass pos ident expr) = do
@@ -247,7 +255,7 @@ assertVarType :: Pos -> Ident -> CType -> Compl Val
 assertVarType pos ident expectedType = do
   env <- get
   case Map.lookup ident env of
-    (Just varType) -> do
+    (Just (varType, modif)) -> do
       if varType == expectedType then return "" else printError pos $ "Variable" ++ show ident ++ " should be of type " ++ show expectedType
       return ""
     Nothing -> printError pos $ show ident ++ " is not declared"
@@ -256,7 +264,7 @@ assertDecl :: Pos -> Ident -> Compl CType
 assertDecl pos ident = do
   env <- get
   case Map.lookup ident env of
-    (Just varType) -> return varType
+    (Just (varType, modif)) -> return varType
     Nothing -> printError pos $ show ident ++ " is not declared"
 
 loopArgs :: [Arg] -> Compl Val
@@ -270,7 +278,10 @@ addVar :: Pos -> CType -> Ident -> Compl Val
 addVar pos varType ident = do
   env <- get
   case Map.lookup ident env of
-    (Just _) -> printError pos $ "Name " ++ show ident ++ " is already taken"
+    (Just (storedType, False)) -> printError pos $ "Name " ++ show ident ++ " is already defined"
+    (Just (storedType, True)) -> do
+      put $ Map.insert ident (varType, False) env
+      return ""
     Nothing -> do
-      put $ Map.insert ident varType env
+      put $ Map.insert ident (varType, True) env
       return ""
