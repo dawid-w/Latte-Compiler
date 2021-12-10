@@ -14,8 +14,6 @@ type Env = (Map Ident (CType, Bool))
 
 type Loc = Int
 
-type Result = String
-
 type Val = String
 
 type Error = String

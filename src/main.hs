@@ -1,8 +1,9 @@
 module Main where
 
-import StaticAnalysis
+import Compiler
 import Latte.Abs
 import Latte.Par
+import StaticAnalysis
 import System.Environment (getArgs)
 import System.Exit
 import System.FilePath (dropExtension, replaceExtension, takeDirectory, takeFileName)
@@ -32,7 +33,13 @@ main = do
           case result of
             (Right text) -> do
               putStrLn "OK\n"
+              compilerResult <- compile program
+              -- TODO: --
+              case compilerResult of
+                (Right generatedText) -> putStrLn generatedText
+                (Left error) -> hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
               exitSuccess
+            --------------
             (Left error) -> do
               hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
               exitFailure
