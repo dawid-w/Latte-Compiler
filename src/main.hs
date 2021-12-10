@@ -1,6 +1,6 @@
 module Main where
 
-import LLVMCompiler
+import StaticAnalysis
 import Latte.Abs
 import Latte.Par
 import System.Environment (getArgs)
@@ -28,7 +28,7 @@ main = do
 
       case pProgram tokens of
         Right program -> do
-          result <- compile program
+          result <- run program
           case result of
             (Right text) -> do
               putStrLn "OK\n"

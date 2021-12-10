@@ -1,4 +1,4 @@
-module LLVMCompiler where
+module StaticAnalysis where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -36,18 +36,18 @@ initEnv =
       (Ident "readString", (CFun CStr [], False))
     ]
 
-compile :: Program -> IO (Either Error String)
-compile program = do
-  co <- runStateT (runExceptT (compileProgram program)) initEnv
+run :: Program -> IO (Either Error String)
+run program = do
+  co <- runStateT (runExceptT (checkProgram program)) initEnv
   case fst co of
     (Left error) -> return $ Left error
     (Right r) ->
       return $ Right ("Program:" ++ r ++ "\n")
 
-compileProgram :: Program -> Compl Val
-compileProgram (Program pos topDefs) = do
+checkProgram :: Program -> Compl Val
+checkProgram (Program pos topDefs) = do
   _ <- addDefs topDefs
-  result <- compileDefs topDefs
+  result <- checkDefs topDefs
   env <- get
   case Map.lookup (Ident "main") env of
     Nothing -> printError Nothing "No main function"
@@ -76,19 +76,19 @@ addDef (FnDef pos retType ident args block) = do
 getArgType :: Arg -> CType
 getArgType (Arg pos argType ident) = getCType argType
 
-compileDefs :: [TopDef] -> Compl Val
-compileDefs [] = return ""
-compileDefs (def : defs) = do
-  result <- compileDef def
-  results <- compileDefs defs
+checkDefs :: [TopDef] -> Compl Val
+checkDefs [] = return ""
+checkDefs (def : defs) = do
+  result <- checkDef def
+  results <- checkDefs defs
   return (result ++ "," ++ results)
 
-compileDef :: TopDef -> Compl Val
-compileDef (FnDef pos retType ident args block) = do
+checkDef :: TopDef -> Compl Val
+checkDef (FnDef pos retType ident args block) = do
   env <- get
   loopArgs args
   let (Block pos stmts) = block
-  compileStmts (getCType retType) stmts
+  checkStmts (getCType retType) stmts
   validRet <- checkReturn stmts (getCType retType)
   if not validRet
     then printError pos $ "Function needs to return " ++ show (getCType retType)
@@ -96,11 +96,11 @@ compileDef (FnDef pos retType ident args block) = do
   put env
   return ""
 
-compileStmts :: CType -> [Stmt] -> Compl Val
-compileStmts retType [] = return ""
-compileStmts retType (stmt : stmts) = do
-  result <- compileStmt retType stmt
-  results <- compileStmts retType stmts
+checkStmts :: CType -> [Stmt] -> Compl Val
+checkStmts retType [] = return ""
+checkStmts retType (stmt : stmts) = do
+  result <- checkStmt retType stmt
+  results <- checkStmts retType stmts
   return ""
 
 initVar :: Pos -> CType -> [Item] -> Compl Val
@@ -110,7 +110,7 @@ initVar p1 varType ((NoInit p2 ident) : items) = do
   initVar p1 varType items
 initVar p1 varType ((Init p2 ident expr) : items) = do
   addVar p1 varType ident
-  compileStmt CVoid (Ass p1 ident expr)
+  checkStmt CVoid (Ass p1 ident expr)
   initVar p1 varType items
 
 checkReturn :: [Stmt] -> CType -> Compl Bool
@@ -165,40 +165,40 @@ newContext :: (Ident, (CType, Bool)) -> (Ident, (CType, Bool))
 newContext (ident, (CFun retType args, modif)) = (ident, (CFun retType args, False))
 newContext (ident, (storedType, modif)) = (ident, (storedType, True))
 
-compileStmt :: CType -> Stmt -> Compl Val
-compileStmt retType (Empty pos) = return ""
-compileStmt retType (BStmt pos block) = do
+checkStmt :: CType -> Stmt -> Compl Val
+checkStmt retType (Empty pos) = return ""
+checkStmt retType (BStmt pos block) = do
   let (Block pos stmts) = block
   env <- get
   put $ fromList $ Prelude.map newContext $ toList env
-  compileStmts retType stmts
+  checkStmts retType stmts
   put env
   return ""
-compileStmt retType (Decl pos varType items) =
+checkStmt retType (Decl pos varType items) =
   initVar pos (getCType varType) items
-compileStmt retType (Ass pos ident expr) = do
+checkStmt retType (Ass pos ident expr) = do
   varType <- assertDecl pos ident
   assertExprType expr varType
-compileStmt retType (Incr pos ident) = assertVarType pos ident CInt
-compileStmt retType (Decr pos ident) = assertVarType pos ident CInt
-compileStmt retType (Ret pos expr) = do
+checkStmt retType (Incr pos ident) = assertVarType pos ident CInt
+checkStmt retType (Decr pos ident) = assertVarType pos ident CInt
+checkStmt retType (Ret pos expr) = do
   r <- getExprType expr
   if retType == r
     then return ""
     else printError pos $ "Function should return " ++ show retType
-compileStmt CVoid (VRet pos) = return ""
-compileStmt retType (VRet pos) = printError pos $ "Function should return " ++ show retType
-compileStmt retType (Cond pos expr stmt) = do
+checkStmt CVoid (VRet pos) = return ""
+checkStmt retType (VRet pos) = printError pos $ "Function should return " ++ show retType
+checkStmt retType (Cond pos expr stmt) = do
   assertExprType expr CBool
-  compileStmt retType stmt
-compileStmt retType (CondElse pos expr stmt1 stmt2) = do
+  checkStmt retType stmt
+checkStmt retType (CondElse pos expr stmt1 stmt2) = do
   assertExprType expr CBool
-  compileStmt retType stmt1
-  compileStmt retType stmt2
-compileStmt retType (While pos expr stmt) = do
+  checkStmt retType stmt1
+  checkStmt retType stmt2
+checkStmt retType (While pos expr stmt) = do
   assertExprType expr CBool
-  compileStmt retType stmt
-compileStmt retType (SExp pos expr) = do
+  checkStmt retType stmt
+checkStmt retType (SExp pos expr) = do
   expType <- getExprType expr
   assertExprType expr expType
 
