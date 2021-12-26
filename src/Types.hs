@@ -20,3 +20,10 @@ instance Show CType where
   show CBool = "bool"
   show CVoid = "void"
   show (CFun _ _) = "function"
+
+typeToLL :: Type -> String
+typeToLL (Int _) = "i32"
+typeToLL (Str _) = "todo"
+typeToLL (Bool _) = "todo"
+typeToLL (Void _) = "todo"
+typeToLL (Fun _ retType args) = "todo"
