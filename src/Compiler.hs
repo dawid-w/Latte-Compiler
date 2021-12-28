@@ -3,36 +3,13 @@ module Compiler where
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Map as Map
+import Env
 import Latte.Abs
 import Types
 
-type Env = (Map Ident (CType, Int), Int)
-
-type Loc = Int
-
 type Result = String
 
-type RegNum = Int
-
-type Val = Result
-
 type ExprResult = (Int, Result, CType)
-
-type Error = String
-
-type Compl a = ExceptT Error (StateT Env IO) a
-
-initEnv :: Env
-initEnv =
-  ( fromList
-      [ (Ident "printInt", (CFun CVoid [CInt], 0)),
-        (Ident "printString", (CFun CVoid [CStr], 0)),
-        (Ident "error", (CFun CVoid [], 0)),
-        (Ident "readInt", (CFun CInt [], 0)),
-        (Ident "readString", (CFun CStr [], 0))
-      ],
-    0
-  )
 
 indent :: [Char] -> [Char]
 indent ('\n' : str) = "\n    " ++ indent str
@@ -58,50 +35,48 @@ compile program = do
               ++ "\n"
           )
 
-compileProgram :: Program -> Compl Val
+compileProgram :: Program -> Compl Result
 compileProgram (Program pos topDefs) = compileDefs topDefs
 
 printError :: Pos -> String -> Compl a
 printError (Just (l, c)) text = throwError $ "error at line " ++ show l ++ " column " ++ show c ++ ": " ++ text
 printError Nothing text = throwError $ "error: " ++ text
 
-compileDefs :: [TopDef] -> Compl Val
+compileDefs :: [TopDef] -> Compl Result
 compileDefs [] = return ""
 compileDefs (def : defs) = do
   resultText1 <- compileDef def
   resultText2 <- compileDefs defs
   return $ resultText1 ++ resultText2
 
-compileDef :: TopDef -> Compl Val
+compileDef :: TopDef -> Compl Result
 compileDef (FnDef pos retType (Ident name) args block) = do
   env <- get
   argsStr <- defArgs args
   blockStr <- compileBlock block
   return $ "define " ++ typeToLL retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n    " ++ indent blockStr ++ "\n}\n"
 
-defArgs :: [Arg] -> Compl Val
+defArgs :: [Arg] -> Compl Result
 defArgs [] = do return ""
 defArgs [Arg pos argType ident] = do
-  (map, reg) <- get
-  put (Map.insert ident (getCType argType, reg) map, reg + 1)
+  reg <- addVar (getCType argType) ident
   return $ typeToLL argType ++ " %v" ++ show reg
 defArgs ((Arg pos argType ident) : args) = do
   argsStr <- defArgs args
-  (map, reg) <- get
-  put (Map.insert ident (getCType argType, reg) map, reg + 1)
+  reg <- addVar (getCType argType) ident
   return $ argsStr ++ "," ++ typeToLL argType ++ " %v" ++ show reg
 
-compileBlock :: Block -> Compl Val
+compileBlock :: Block -> Compl Result
 compileBlock (Block pos stmts) = compileStmts stmts
 
-compileStmts :: [Stmt] -> Compl Val
+compileStmts :: [Stmt] -> Compl Result
 compileStmts [] = do return ""
 compileStmts (stmt : stmts) = do
   r1 <- compileStmt stmt
   r2 <- compileStmts stmts
   return $ r1 ++ r2
 
-compileStmt :: Stmt -> Compl Val
+compileStmt :: Stmt -> Compl Result
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
 compileStmt (Ret pos expr) = do
@@ -112,8 +87,7 @@ compileStmt (Ass pos ident expr) = do
   (map, nextR) <- get
   case Map.lookup ident map of
     (Just (ctype, varReg)) -> do
-      let newMap = Map.insert ident (ctype, nextR) map
-      put (newMap, nextR + 1)
+      nextR <- addVar ctype ident
       return $ text ++ "%v" ++ show nextR ++ " = or " ++ show exprType ++ " 0, %v" ++ show reg ++ "\n"
     Nothing -> do
       let (Ident name) = ident
@@ -122,7 +96,7 @@ compileStmt (Empty pos) = return ""
 compileStmt (VRet pos) = return ""
 compileStmt _ = do return ""
 
-initVar :: CType -> [Item] -> Compl Val
+initVar :: CType -> [Item] -> Compl Result
 initVar varType [] = do return ""
 initVar varType ((NoInit pos ident) : items) = do
   addVar varType ident
@@ -133,20 +107,16 @@ initVar varType ((Init pos ident expr) : items) = do
   r2 <- initVar varType items
   return $ r1 ++ r2
 
-addVar :: CType -> Ident -> Compl Val
-addVar varType ident = do
-  (map, nextR) <- get
-  let (Ident varName) = ident
-  let newMap = Map.insert ident (varType, nextR) map
-  put (newMap, nextR + 1)
-  return ""
-
 compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 "add"
 compileExpr (EAdd pos e1 (Minus posOp) e2) = compileBinExp e1 e2 "sub"
 compileExpr (EMul pos e1 (Times posOp) e2) = compileBinExp e1 e2 "mul"
 compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 "div"
 compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 "mod"
+compileExpr (ELitTrue pos) = do
+  (map, nextR) <- get
+  put (map, nextR + 1)
+  return (nextR, "%v" ++ show nextR ++ " = " ++ "or" ++ " i1 " ++ "1,1" ++ "\n", CBool)
 compileExpr (ELitFalse pos) = do
   (map, nextR) <- get
   put (map, nextR + 1)
@@ -167,7 +137,24 @@ compileExpr (EVar pos ident) = do
     Nothing -> do
       let (Ident name) = ident
       throwError $ "Unknown ident: " ++ name
+compileExpr (EApp pos ident exprs) = do
+  (argStr, compileStr) <- compileArgsExpr exprs
+  let (Ident fName) = ident
+  (map, reg) <- get
+  put (map, reg + 1)
+  return (reg, compileStr ++ "%v" ++ show reg ++ " = call i32 @" ++ fName ++ "(" ++ argStr ++ ")\n", CInt)
+compileExpr (EString pos str) = do return (0, "", CStr)
 compileExpr _ = do return (0, "", CVoid)
+
+compileArgsExpr :: [Expr] -> Compl (String, String)
+compileArgsExpr [] = return ("", "")
+compileArgsExpr [expr] = do
+  (reg, text, ctype) <- compileExpr expr
+  return (show ctype ++ "%v" ++ show reg, text)
+compileArgsExpr (expr : exprs) = do
+  (reg, text, ctype) <- compileExpr expr
+  (argStr, compileStr) <- compileArgsExpr exprs
+  return (show ctype ++ " %v" ++ show reg ++ "," ++ argStr, text ++ compileStr)
 
 compileBinExp :: Expr -> Expr -> String -> Compl ExprResult
 compileBinExp e1 e2 s = do
