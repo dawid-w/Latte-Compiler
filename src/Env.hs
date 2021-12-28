@@ -41,6 +41,14 @@ addVar varType ident = do
   put (Map.insert ident loc venv, Map.insert loc (varType, reg) store, loc + 1, nextReg reg)
   return reg
 
+setVar :: CType -> Ident -> Compl Register
+setVar varType ident = do
+  (venv, store, loc, reg) <- get
+  let (Just varLoc) = Map.lookup ident venv
+  --   (ctype, reg) <- getVar ident
+  put (venv, Map.insert varLoc (varType, reg) store, loc, nextReg reg)
+  return reg
+
 useReg :: Compl Register
 useReg = do
   (venv, store, loc, reg) <- get
@@ -50,9 +58,9 @@ useReg = do
 getVar :: Ident -> Compl (CType, Register)
 getVar ident = do
   (venv, store, loc, reg) <- get
-  let (Just loc) = Map.lookup ident venv
-  let (Just (ctype, reg)) = Map.lookup loc store
-  return (ctype, reg)
+  let (Just varLoc) = Map.lookup ident venv
+  let (Just (ctype, varReg)) = Map.lookup varLoc store
+  return (ctype, varReg)
 
 --   (map, nextR) <- get
 --   case Map.lookup ident map of

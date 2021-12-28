@@ -2,13 +2,34 @@ module StaticAnalysis where
 
 import Control.Monad.Except
 import Control.Monad.State
-import Data.Map as Map
+import Data.Map as Map (Map, fromList, insert, lookup, toList)
 import Language.Haskell.TH (varT)
 import Latte.Abs
 import Text.Parsec.Token (GenLanguageDef (identLetter))
 import Text.Read.Lex (expect)
-import Types (CType (CBool, CFun, CInt, CStr, CVoid), Pos, getCType)
 import Prelude
+
+--------------------------------------------
+type Pos = BNFC'Position
+
+data CType = CInt | CStr | CBool | CVoid | CFun CType [CType]
+  deriving (Eq)
+
+getCType :: Type -> CType
+getCType (Int _) = CInt
+getCType (Str _) = CStr
+getCType (Bool _) = CBool
+getCType (Void _) = CVoid
+getCType (Fun _ retType args) = CFun (getCType retType) (map getCType args)
+
+instance Show CType where
+  show CInt = "int"
+  show CStr = "string"
+  show CBool = "bool"
+  show CVoid = "void"
+  show (CFun _ _) = "function"
+
+--------------------------------------------
 
 type Env = (Map Ident (CType, Bool))
 

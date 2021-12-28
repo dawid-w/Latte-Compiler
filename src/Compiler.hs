@@ -77,9 +77,12 @@ compileStmts (stmt : stmts) = do
 
 compileStmt :: Stmt -> Compl Result
 compileStmt (BStmt pos block) = do
+  (venv, store, loc, reg) <- get
   let (Block pos stmts) = block
   blockText <- compileStmts stmts
-  return $ "label:\n " ++ indent blockText ++ "\n endlabel: \n"
+  (postVenv, postStore, postLoc, postReg) <- get
+  put (venv, postStore, loc, postReg)
+  return $ "\n " ++ indent blockText ++ "\n\n"
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
 compileStmt (Ret pos expr) = do
@@ -88,7 +91,7 @@ compileStmt (Ret pos expr) = do
 compileStmt (Ass pos ident expr) = do
   (exprReg, exprText, exprType) <- compileExpr expr
   (varType, _) <- getVar ident
-  varReg <- addVar varType ident
+  varReg <- setVar varType ident
   return $ exprText ++ show varReg ++ " = or " ++ show exprType ++ " 0, " ++ show exprReg ++ "\n"
 compileStmt (VRet pos) = return ""
 compileStmt _ = do return ""
