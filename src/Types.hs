@@ -15,15 +15,15 @@ getCType (Void _) = CVoid
 getCType (Fun _ retType args) = CFun (getCType retType) (map getCType args)
 
 instance Show CType where
-  show CInt = "int"
+  show CInt = "i32"
   show CStr = "string"
-  show CBool = "bool"
+  show CBool = "i1"
   show CVoid = "void"
   show (CFun _ _) = "function"
 
 typeToLL :: Type -> String
 typeToLL (Int _) = "i32"
 typeToLL (Str _) = "todo"
-typeToLL (Bool _) = "todo"
+typeToLL (Bool _) = "i1"
 typeToLL (Void _) = "todo"
 typeToLL (Fun _ retType args) = "todo"

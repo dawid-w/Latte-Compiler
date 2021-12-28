@@ -16,7 +16,7 @@ type RegNum = Int
 
 type Val = Result
 
-type RegVal = (Int, Result)
+type ExprResult = (Int, Result, CType)
 
 type Error = String
 
@@ -84,12 +84,12 @@ defArgs [] = do return ""
 defArgs [Arg pos argType ident] = do
   (map, reg) <- get
   put (Map.insert ident (getCType argType, reg) map, reg + 1)
-  return $ "i32 %v" ++ show reg
+  return $ typeToLL argType ++ " %v" ++ show reg
 defArgs ((Arg pos argType ident) : args) = do
   argsStr <- defArgs args
   (map, reg) <- get
   put (Map.insert ident (getCType argType, reg) map, reg + 1)
-  return $ argsStr ++ ",i32 %v" ++ show reg
+  return $ argsStr ++ "," ++ typeToLL argType ++ " %v" ++ show reg
 
 compileBlock :: Block -> Compl Val
 compileBlock (Block pos stmts) = compileStmts stmts
@@ -105,19 +105,21 @@ compileStmt :: Stmt -> Compl Val
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
 compileStmt (Ret pos expr) = do
-  (reg, text) <- compileExpr expr
-  return $ text ++ "ret i32 %v" ++ show reg
+  (reg, text, exprType) <- compileExpr expr
+  return $ text ++ "ret " ++ show exprType ++ " %v" ++ show reg
 compileStmt (Ass pos ident expr) = do
-  (reg, text) <- compileExpr expr
+  (reg, text, exprType) <- compileExpr expr
   (map, nextR) <- get
   case Map.lookup ident map of
     (Just (ctype, varReg)) -> do
       let newMap = Map.insert ident (ctype, nextR) map
       put (newMap, nextR + 1)
-      return $ text ++ "%v" ++ show nextR ++ " = add i32 0, %v" ++ show reg ++ "\n"
+      return $ text ++ "%v" ++ show nextR ++ " = or " ++ show exprType ++ " 0, %v" ++ show reg ++ "\n"
     Nothing -> do
       let (Ident name) = ident
       throwError $ "Unkfnown ident: " ++ name
+compileStmt (Empty pos) = return ""
+compileStmt (VRet pos) = return ""
 compileStmt _ = do return ""
 
 initVar :: CType -> [Item] -> Compl Val
@@ -139,31 +141,38 @@ addVar varType ident = do
   put (newMap, nextR + 1)
   return ""
 
-compileExpr :: Expr -> Compl RegVal
+compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 "add"
 compileExpr (EAdd pos e1 (Minus posOp) e2) = compileBinExp e1 e2 "sub"
 compileExpr (EMul pos e1 (Times posOp) e2) = compileBinExp e1 e2 "mul"
 compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 "div"
 compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 "mod"
+compileExpr (ELitFalse pos) = do
+  (map, nextR) <- get
+  put (map, nextR + 1)
+  return (nextR, "%v" ++ show nextR ++ " = " ++ "or" ++ " i1 " ++ "0,0" ++ "\n", CBool)
 compileExpr (ELitInt pos num) = do
   (map, nextR) <- get
   put (map, nextR + 1)
-  return (nextR, "%v" ++ show nextR ++ " = " ++ "add" ++ " i32 " ++ "0" ++ ", " ++ show num ++ "\n")
+  return (nextR, "%v" ++ show nextR ++ " = " ++ "or" ++ " i32 " ++ "0," ++ show num ++ "\n", CInt)
 compileExpr (EVar pos ident) = do
   (map, reg) <- get
   put (map, reg + 1)
   let (Ident name) = ident
   case Map.lookup ident map of
-    (Just (ctype, varReg)) -> return (reg, "%v" ++ show reg ++ " = add i32 0, %v" ++ show varReg ++ "\n")
+    (Just (CInt, varReg)) -> return (reg, "%v" ++ show reg ++ " = or i32 0, %v" ++ show varReg ++ "\n", CInt)
+    (Just (CBool, varReg)) -> return (reg, "%v" ++ show reg ++ " = or i1 0, %v" ++ show varReg ++ "\n", CBool)
+    (Just (CVoid, varReg)) -> return (0, "", CVoid)
+    (Just (_, varReg)) -> return (0, "", CVoid)
     Nothing -> do
       let (Ident name) = ident
       throwError $ "Unknown ident: " ++ name
-compileExpr _ = do return (0, "")
+compileExpr _ = do return (0, "", CVoid)
 
-compileBinExp :: Expr -> Expr -> String -> Compl RegVal
+compileBinExp :: Expr -> Expr -> String -> Compl ExprResult
 compileBinExp e1 e2 s = do
-  (reg1, result1) <- compileExpr e1
-  (reg2, result2) <- compileExpr e2
+  (reg1, result1, t1) <- compileExpr e1
+  (reg2, result2, t2) <- compileExpr e2
   (map, reg) <- get
   put (map, reg + 1)
-  return (reg, result1 ++ result2 ++ "%v" ++ show reg ++ " = " ++ s ++ " i32 %v" ++ show reg1 ++ ", %v" ++ show reg2 ++ "\n")
+  return (reg, result1 ++ result2 ++ "%v" ++ show reg ++ " = " ++ s ++ " i32 %v" ++ show reg1 ++ ", %v" ++ show reg2 ++ "\n", t1)
