@@ -77,11 +77,11 @@ compileStmts (stmt : stmts) = do
 
 compileStmt :: Stmt -> Compl Result
 compileStmt (BStmt pos block) = do
-  (venv, store, loc, reg) <- get
+  (penv, venv, store, loc, reg) <- get
   let (Block pos stmts) = block
   blockText <- compileStmts stmts
-  (postVenv, postStore, postLoc, postReg) <- get
-  put (venv, postStore, loc, postReg)
+  (postPenv, postVenv, postStore, postLoc, postReg) <- get
+  put (penv, venv, postStore, loc, postReg)
   return $ "\n " ++ indent blockText ++ "\n\n"
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
@@ -94,6 +94,9 @@ compileStmt (Ass pos ident expr) = do
   varReg <- setVar varType ident
   return $ exprText ++ show varReg ++ " = or " ++ show exprType ++ " 0, " ++ show exprReg ++ "\n"
 compileStmt (VRet pos) = return ""
+compileStmt (SExp pos expr) = do
+  (reg, text, retType) <- compileExpr expr
+  return text
 compileStmt _ = do return ""
 
 initVar :: CType -> [Item] -> Compl Result
@@ -132,8 +135,12 @@ compileExpr (EVar pos ident) = do
     _ -> return (Reg 0, "", CVoid)
 compileExpr (EApp pos (Ident name) exprs) = do
   (argStr, compileStr) <- compileArgsExpr exprs
-  reg <- useReg
-  return (reg, compileStr ++ show reg ++ " = call i32 @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
+  (retType, argsTypes) <- getProc $ Ident name
+  case retType of
+    CVoid -> do return (Reg 0, compileStr ++ "call i32 @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
+    _ -> do
+      reg <- useReg
+      return (reg, compileStr ++ show reg ++ " = call " ++ show retType ++ " @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
 compileExpr (EString pos str) = do return (Reg 0, "", CStr)
 compileExpr _ = do return (Reg 0, "", CVoid)
 
@@ -141,7 +148,7 @@ compileArgsExpr :: [Expr] -> Compl (String, String)
 compileArgsExpr [] = return ("", "")
 compileArgsExpr [expr] = do
   (reg, text, ctype) <- compileExpr expr
-  return (show ctype ++ show reg, text)
+  return (show ctype ++ " " ++ show reg, text)
 compileArgsExpr (expr : exprs) = do
   (reg, text, ctype) <- compileExpr expr
   (argStr, compileStr) <- compileArgsExpr exprs
