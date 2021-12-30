@@ -103,6 +103,9 @@ compileStmt (Ret pos expr) = do
   (reg, text, exprType) <- compileExpr expr
   return $ text ++ "ret " ++ show exprType ++ " " ++ show reg
 compileStmt (VRet pos) = return ""
+compileStmt (Cond pos expr stmt) = do
+  -- TODO
+  compileStmt stmt
 compileStmt (SExp pos expr) = do
   (reg, text, retType) <- compileExpr expr
   return text
@@ -125,6 +128,7 @@ compileExpr (EAdd pos e1 (Minus posOp) e2) = compileBinExp e1 e2 SubOp
 compileExpr (EMul pos e1 (Times posOp) e2) = compileBinExp e1 e2 AddOp
 compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 AddOp
 compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 AddOp
+compileExpr (ERel pos e1 op e2) = compileCmpExpr e1 e2 op
 compileExpr (ELitTrue pos) = do
   reg <- useReg
   return (reg, show reg ++ " = " ++ "or i1 1,1" ++ "\n", CBool)
@@ -169,3 +173,10 @@ compileBinExp e1 e2 op = do
   (reg2, result2, t2) <- compileExpr e2
   reg <- useReg
   return (reg, result1 ++ result2 ++ show (ArtI op (RegVal reg1) (RegVal reg2) reg), t1)
+
+compileCmpExpr :: Expr -> Expr -> RelOp -> Compl ExprResult
+compileCmpExpr e1 e2 op = do
+  (reg1, result1, t1) <- compileExpr e1
+  (reg2, result2, t2) <- compileExpr e2
+  reg <- useReg
+  return (reg, result1 ++ result2 ++ show (CmpI op t1 (RegVal reg1) (RegVal reg2) reg), CBool)

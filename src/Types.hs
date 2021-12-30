@@ -25,7 +25,7 @@ typeToLLVM :: Type -> String
 typeToLLVM (Int _) = "i32"
 typeToLLVM (Str _) = "todo"
 typeToLLVM (Bool _) = "i1"
-typeToLLVM (Void _) = "todo"
+typeToLLVM (Void _) = "void"
 typeToLLVM (Fun _ retType args) = "todo"
 
 data Register = Reg Int deriving (Eq)
