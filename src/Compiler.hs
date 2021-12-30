@@ -49,8 +49,12 @@ compileDefs (def : defs) = do
   resultText2 <- compileDefs defs
   return $ resultText1 ++ resultText2
 
+getArgCType :: Arg -> CType
+getArgCType (Arg pos argType ident) = getCType argType
+
 compileDef :: TopDef -> Compl Result
 compileDef (FnDef pos retType (Ident name) args block) = do
+  _ <- addProc (getCType retType) (Ident name) (Prelude.map getArgCType args)
   argsStr <- defArgs args
   blockStr <- compileBlock block
   return $ "define " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ indent blockStr ++ "\n}\n"
@@ -137,7 +141,7 @@ compileExpr (EApp pos (Ident name) exprs) = do
   (argStr, compileStr) <- compileArgsExpr exprs
   (retType, argsTypes) <- getProc $ Ident name
   case retType of
-    CVoid -> do return (Reg 0, compileStr ++ "call i32 @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
+    CVoid -> do return (Reg 0, compileStr ++ "call void @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
     _ -> do
       reg <- useReg
       return (reg, compileStr ++ show reg ++ " = call " ++ show retType ++ " @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
@@ -159,4 +163,4 @@ compileBinExp e1 e2 op = do
   (reg1, result1, t1) <- compileExpr e1
   (reg2, result2, t2) <- compileExpr e2
   reg <- useReg
-  return (reg, result1 ++ result2 ++ show (ArtI op (RegVal reg1) (RegVal reg1) reg), t1)
+  return (reg, result1 ++ result2 ++ show (ArtI op (RegVal reg1) (RegVal reg2) reg), t1)

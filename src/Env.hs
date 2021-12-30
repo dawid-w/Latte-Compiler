@@ -46,6 +46,12 @@ addVar varType ident = do
   put (penv, Map.insert ident loc venv, Map.insert loc (varType, reg) store, loc + 1, nextReg reg)
   return reg
 
+addProc :: CType -> Ident -> [CType] -> Compl ()
+addProc retType ident argsTypes = do
+  (penv, venv, store, loc, reg) <- get
+  put (Map.insert ident (CFun retType argsTypes) penv, venv, store, loc, reg)
+  return ()
+
 setVar :: CType -> Ident -> Compl Register
 setVar varType ident = do
   (penv, venv, store, loc, reg) <- get
