@@ -80,6 +80,7 @@ compileStmts (stmt : stmts) = do
   return $ r1 ++ r2
 
 compileStmt :: Stmt -> Compl Result
+compileStmt (Empty pos) = do return ""
 compileStmt (BStmt pos block) = do
   (penv, venv, store, loc, reg) <- get
   let (Block pos stmts) = block
@@ -89,14 +90,18 @@ compileStmt (BStmt pos block) = do
   return $ "\n " ++ indent blockText ++ "\n\n"
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
-compileStmt (Ret pos expr) = do
-  (reg, text, exprType) <- compileExpr expr
-  return $ text ++ "ret " ++ show exprType ++ " " ++ show reg
 compileStmt (Ass pos ident expr) = do
   (exprReg, exprText, exprType) <- compileExpr expr
   (varType, _) <- getVar ident
   varReg <- setVar varType ident
   return $ exprText ++ show varReg ++ " = or " ++ show exprType ++ " 0, " ++ show exprReg ++ "\n"
+compileStmt (Incr pos ident) = do
+  compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Plus pos) (ELitInt pos 1)))
+compileStmt (Decr pos ident) = do
+  compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Minus pos) (ELitInt pos 1)))
+compileStmt (Ret pos expr) = do
+  (reg, text, exprType) <- compileExpr expr
+  return $ text ++ "ret " ++ show exprType ++ " " ++ show reg
 compileStmt (VRet pos) = return ""
 compileStmt (SExp pos expr) = do
   (reg, text, retType) <- compileExpr expr
