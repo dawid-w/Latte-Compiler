@@ -37,11 +37,13 @@ instance Show Instruction where
 data BoolOp
   = AndOp
   | OrOp
+  | XorOp
   deriving (Eq)
 
 instance Show BoolOp where
   show AndOp = "and"
   show OrOp = "or"
+  show XorOp= "xor"
 
 data ArtOp
   = AddOp

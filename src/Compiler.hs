@@ -189,9 +189,10 @@ compileExpr (EOr pos e1 e2) = do
   (reg2, text2, ctype2) <- compileExpr e2
   reg <- useReg
   return (reg, text1 ++ text2 ++ show (BoolI reg OrOp (RegVal reg1) (RegVal reg2)), CBool)
---  Not a (Expr' a)
-
-compileExpr _ = do return (Reg 0, "", CVoid)
+compileExpr (Not pos expr) = do
+  (exprReg, text, ctype) <- compileExpr expr
+  reg <- useReg
+  return (reg, text ++ show (BoolI reg XorOp (IntVal 1) (RegVal exprReg)), CBool)
 
 compileArgsExpr :: [Expr] -> Compl (String, String)
 compileArgsExpr [] = return ("", "")
