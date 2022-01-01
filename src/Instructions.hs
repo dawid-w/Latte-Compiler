@@ -15,6 +15,10 @@ data Instruction
   | BrI Register Label Label
   | JmpI Label
   | IfElseI Register Label Label Label String String
+  | WhileI Register String Label Label Label String
+  | AddV Var CType
+  | GetV Var CType Register
+  | SetV Var CType Register
   deriving (Eq)
 
 instance Show Instruction where
@@ -22,7 +26,15 @@ instance Show Instruction where
   show (CmpI op ctype v1 v2 reg) = show reg ++ " = icmp " ++ relOpToLLVM op ++ " " ++ show ctype ++ " " ++ show v1 ++ ", " ++ show v2 ++ "\n"
   show (BrI reg label1 label2) = "br i1 " ++ show reg ++ ", label " ++ "%" ++ show label1 ++ ", label " ++ "%" ++ show label2 ++ "\n"
   show (JmpI label) = "br label %" ++ show label ++ "\n"
-  show (IfElseI exprReg lTrue lFalse lEnd trueCode falseCode) = (show (BrI exprReg lTrue lFalse) ++ show lTrue ++ ": \n" ++ trueCode ++ show (JmpI lEnd) ++ show lFalse ++ ":\n" ++ falseCode ++ show (JmpI lEnd) ++ show lEnd ++ ":\n")
+  show (IfElseI exprReg lTrue lFalse lEnd trueCode falseCode) = show (BrI exprReg lTrue lFalse) ++ show lTrue ++ ": \n" ++ trueCode ++ show (JmpI lEnd) ++ show lFalse ++ ":\n" ++ falseCode ++ show (JmpI lEnd) ++ show lEnd ++ ":\n"
+  show (WhileI exprReg exprCode lStart lTrue lEnd code) = show (JmpI lStart) ++ show lStart ++ ": \n" ++ exprCode ++ show (BrI exprReg lTrue lEnd) ++ show lTrue ++ ":\n" ++ code ++ show (JmpI lStart) ++ show lEnd ++ ": \n"
+  show (AddV var ctype) = show var ++ " = alloca " ++ show ctype ++ "\n  store " ++ show ctype ++ " 0, " ++ show ctype ++ "* " ++ show var ++ "\n"
+  show (GetV var ctype reg) = show reg ++ " = load " ++ show ctype ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
+  show (SetV var ctype reg) = "store " ++ show ctype ++ " " ++ show reg ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
+
+-- show (AddV name ctype) = "%loc_r = alloca i32\n  store i32 1, i32* %loc_r\n  %t1 = load i32, i32* %loc_r"
+
+-- show (BrI exprReg lTrue lFalse) ++ show lTrue ++ ": \n" ++ trueCode ++ show (JmpI lEnd) ++ show lFalse ++ ":\n" ++ falseCode ++ show (JmpI lEnd) ++ show lEnd ++ ":\n"
 
 data ArtOp
   = AddOp

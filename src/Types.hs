@@ -36,6 +36,14 @@ instance Show Register where
 nextReg :: Register -> Register
 nextReg (Reg num) = Reg $ num + 1
 
+data Var = Var Int deriving (Eq)
+
+instance Show Var where
+  show (Var num) = "%var" ++ show num
+
+nextVar :: Var -> Var
+nextVar (Var num) = Var $ num + 1
+
 data Label = Lab Int deriving (Eq)
 
 instance Show Label where

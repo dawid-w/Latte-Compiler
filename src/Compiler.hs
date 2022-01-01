@@ -55,19 +55,23 @@ getArgCType (Arg pos argType ident) = getCType argType
 compileDef :: TopDef -> Compl Result
 compileDef (FnDef pos retType (Ident name) args block) = do
   _ <- addProc (getCType retType) (Ident name) (Prelude.map getArgCType args)
-  argsStr <- defArgs args
+  (argsStr, initStr) <- defArgs args
   blockStr <- compileBlock block
-  return $ "define " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ indent blockStr ++ "\n}\n"
+  return $ "define " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "\n}\n"
 
-defArgs :: [Arg] -> Compl Result
-defArgs [] = do return ""
+defArgs :: [Arg] -> Compl (String, String)
+defArgs [] = do return ("", "")
 defArgs [Arg pos argType ident] = do
-  reg <- addVar (getCType argType) ident
-  return $ typeToLLVM argType ++ " " ++ show reg
+  reg <- useReg
+  initRes <- initVar (getCType argType) [NoInit pos ident]
+  var <- lastVar
+  return (show (getCType argType) ++ " " ++ show reg, initRes ++ show (SetV var (getCType argType) reg))
 defArgs ((Arg pos argType ident) : args) = do
-  argsStr <- defArgs args
-  reg <- addVar (getCType argType) ident
-  return $ argsStr ++ "," ++ typeToLLVM argType ++ " " ++ show reg
+  (argsStr, initStr) <- defArgs args
+  reg <- useReg
+  initRes <- initVar (getCType argType) [NoInit pos ident]
+  var <- lastVar
+  return (argsStr ++ ", " ++ show (getCType argType) ++ " " ++ show reg, initStr ++ initRes ++ show (SetV var (getCType argType) reg))
 
 compileBlock :: Block -> Compl Result
 compileBlock (Block pos stmts) = compileStmts stmts
@@ -82,19 +86,18 @@ compileStmts (stmt : stmts) = do
 compileStmt :: Stmt -> Compl Result
 compileStmt (Empty pos) = do return ""
 compileStmt (BStmt pos block) = do
-  (penv, venv, store, loc, reg, label) <- get
+  (penv, venv, store, loc, reg, label, var) <- get
   let (Block pos stmts) = block
   blockText <- compileStmts stmts
-  (postPenv, postVenv, postStore, postLoc, postReg, postLabel) <- get
-  put (penv, venv, postStore, loc, postReg, postLabel)
+  (postPenv, postVenv, postStore, postLoc, postReg, postLabel, postVar) <- get
+  put (penv, venv, postStore, loc, postReg, postLabel, postVar)
   return $ "\n " ++ indent blockText ++ "\n\n"
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
 compileStmt (Ass pos ident expr) = do
   (exprReg, exprText, exprType) <- compileExpr expr
-  (varType, _) <- getVar ident
-  varReg <- setVar varType ident
-  return $ exprText ++ show varReg ++ " = or " ++ show exprType ++ " 0, " ++ show exprReg ++ "\n"
+  (varType, var) <- getVar ident
+  return $ exprText ++ show (SetV var varType exprReg)
 compileStmt (Incr pos ident) = do
   compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Plus pos) (ELitInt pos 1)))
 compileStmt (Decr pos ident) = do
@@ -118,21 +121,30 @@ compileStmt (CondElse pos expr stmt1 stmt2) = do
   labFalse <- useLabel
   labEnd <- useLabel
   return $ exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmt1Res stmt2Res)
+compileStmt (While pos expr stmt) = do
+  (exprReg, exprText, exprType) <- compileExpr expr
+  stmtRes <- compileStmt stmt
+  labCheck <- useLabel
+  labTrue <- useLabel
+  labEnd <- useLabel
+  return $ show (WhileI exprReg exprText labCheck labTrue labEnd stmtRes)
+-- return $ exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmtRes "")
 compileStmt (SExp pos expr) = do
   (reg, text, retType) <- compileExpr expr
   return text
-compileStmt _ = do return ""
 
 initVar :: CType -> [Item] -> Compl Result
 initVar varType [] = do return ""
 initVar varType ((NoInit pos ident) : items) = do
-  addVar varType ident
-  initVar varType items
+  newVar <- addVar varType ident
+  rs <- initVar varType items
+  return $ rs ++ show (AddV newVar varType)
 initVar varType ((Init pos ident expr) : items) = do
-  addVar varType ident
+  newVar <- addVar varType ident
+  rs <- initVar varType items
   r1 <- compileStmt (Ass pos ident expr)
   r2 <- initVar varType items
-  return $ r1 ++ r2
+  return $ rs ++ show (AddV newVar varType) ++ r1 ++ r2
 
 compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 AddOp
@@ -151,12 +163,12 @@ compileExpr (ELitInt pos num) = do
   reg <- useReg
   return (reg, show reg ++ " = " ++ "or" ++ " i32 " ++ "0," ++ show num ++ "\n", CInt)
 compileExpr (EVar pos ident) = do
-  reg <- useReg
-  (varType, varReg) <- getVar ident
+  varReg <- useReg
+  resReg <- useReg
+  (varType, var) <- getVar ident
   case varType of
-    CInt -> return (reg, show reg ++ " = or i32 0, " ++ show varReg ++ "\n", CInt)
-    CBool -> return (reg, show reg ++ " = or i1 0, " ++ show varReg ++ "\n", CBool)
-    CVoid -> return (Reg 0, "", CVoid)
+    CInt -> return (resReg, show (GetV var varType varReg) ++ show resReg ++ " = or i32 0, " ++ show varReg ++ "\n", CInt)
+    CBool -> return (resReg, show (GetV var varType varReg) ++ show resReg ++ " = or i1 0, " ++ show varReg ++ "\n", CBool)
     _ -> return (Reg 0, "", CVoid)
 compileExpr (EApp pos (Ident name) exprs) = do
   (argStr, compileStr) <- compileArgsExpr exprs
