@@ -177,7 +177,20 @@ compileExpr (EApp pos (Ident name) exprs) = do
     _ -> do
       reg <- useReg
       return (reg, compileStr ++ show reg ++ " = call " ++ show retType ++ " @" ++ name ++ "(" ++ argStr ++ ")\n", CInt)
-compileExpr (EString pos str) = do return (Reg 0, "", CStr)
+compileExpr (EString pos str) = do return (Reg 0, "", CStr) --TODO
+compileExpr (Neg pos expr) = compileExpr (EAdd pos (ELitInt pos 0) (Minus pos) expr)
+compileExpr (EAnd pos e1 e2) = do
+  (reg1, text1, ctype1) <- compileExpr e1
+  (reg2, text2, ctype2) <- compileExpr e2
+  reg <- useReg
+  return (reg, text1 ++ text2 ++ show (BoolI reg AndOp (RegVal reg1) (RegVal reg2)), CBool)
+compileExpr (EOr pos e1 e2) = do
+  (reg1, text1, ctype1) <- compileExpr e1
+  (reg2, text2, ctype2) <- compileExpr e2
+  reg <- useReg
+  return (reg, text1 ++ text2 ++ show (BoolI reg OrOp (RegVal reg1) (RegVal reg2)), CBool)
+--  Not a (Expr' a)
+
 compileExpr _ = do return (Reg 0, "", CVoid)
 
 compileArgsExpr :: [Expr] -> Compl (String, String)

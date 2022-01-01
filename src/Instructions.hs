@@ -19,6 +19,7 @@ data Instruction
   | AddV Var CType
   | GetV Var CType Register
   | SetV Var CType Register
+  | BoolI Register BoolOp Val Val
   deriving (Eq)
 
 instance Show Instruction where
@@ -31,6 +32,16 @@ instance Show Instruction where
   show (AddV var ctype) = show var ++ " = alloca " ++ show ctype ++ "\n  store " ++ show ctype ++ " 0, " ++ show ctype ++ "* " ++ show var ++ "\n"
   show (GetV var ctype reg) = show reg ++ " = load " ++ show ctype ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
   show (SetV var ctype reg) = "store " ++ show ctype ++ " " ++ show reg ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
+  show (BoolI reg op v1 v2) = show reg ++ " = " ++ show op ++ " i1 " ++ show v1 ++ ", " ++ show v2 ++ "\n"
+
+data BoolOp
+  = AndOp
+  | OrOp
+  deriving (Eq)
+
+instance Show BoolOp where
+  show AndOp = "and"
+  show OrOp = "or"
 
 data ArtOp
   = AddOp
