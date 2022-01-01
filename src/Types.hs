@@ -36,6 +36,14 @@ instance Show Register where
 nextReg :: Register -> Register
 nextReg (Reg num) = Reg $ num + 1
 
+data Label = Lab Int deriving (Eq)
+
+instance Show Label where
+  show (Lab num) = "L_" ++ show num
+
+nextLabel :: Label -> Label
+nextLabel (Lab num) = Lab $ num + 1
+
 data Val
   = IntVal Int
   | RegVal Register

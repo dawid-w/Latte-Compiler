@@ -82,11 +82,11 @@ compileStmts (stmt : stmts) = do
 compileStmt :: Stmt -> Compl Result
 compileStmt (Empty pos) = do return ""
 compileStmt (BStmt pos block) = do
-  (penv, venv, store, loc, reg) <- get
+  (penv, venv, store, loc, reg, label) <- get
   let (Block pos stmts) = block
   blockText <- compileStmts stmts
-  (postPenv, postVenv, postStore, postLoc, postReg) <- get
-  put (penv, venv, postStore, loc, postReg)
+  (postPenv, postVenv, postStore, postLoc, postReg, postLabel) <- get
+  put (penv, venv, postStore, loc, postReg, postLabel)
   return $ "\n " ++ indent blockText ++ "\n\n"
 compileStmt (Decl pos varType items) = do
   initVar (getCType varType) items
@@ -104,8 +104,20 @@ compileStmt (Ret pos expr) = do
   return $ text ++ "ret " ++ show exprType ++ " " ++ show reg
 compileStmt (VRet pos) = return ""
 compileStmt (Cond pos expr stmt) = do
-  -- TODO
-  compileStmt stmt
+  (exprReg, exprText, exprType) <- compileExpr expr
+  stmtRes <- compileStmt stmt
+  labTrue <- useLabel
+  labFalse <- useLabel
+  labEnd <- useLabel
+  return $ exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmtRes "")
+compileStmt (CondElse pos expr stmt1 stmt2) = do
+  (exprReg, exprText, exprType) <- compileExpr expr
+  stmt1Res <- compileStmt stmt1
+  stmt2Res <- compileStmt stmt2
+  labTrue <- useLabel
+  labFalse <- useLabel
+  labEnd <- useLabel
+  return $ exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmt1Res stmt2Res)
 compileStmt (SExp pos expr) = do
   (reg, text, retType) <- compileExpr expr
   return text
