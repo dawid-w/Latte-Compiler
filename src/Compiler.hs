@@ -128,7 +128,6 @@ compileStmt (While pos expr stmt) = do
   labTrue <- useLabel
   labEnd <- useLabel
   return $ show (WhileI exprReg exprText labCheck labTrue labEnd stmtRes)
--- return $ exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmtRes "")
 compileStmt (SExp pos expr) = do
   (reg, text, retType) <- compileExpr expr
   return text

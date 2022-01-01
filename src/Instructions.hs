@@ -32,10 +32,6 @@ instance Show Instruction where
   show (GetV var ctype reg) = show reg ++ " = load " ++ show ctype ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
   show (SetV var ctype reg) = "store " ++ show ctype ++ " " ++ show reg ++ ", " ++ show ctype ++ "* " ++ show var ++ "\n"
 
--- show (AddV name ctype) = "%loc_r = alloca i32\n  store i32 1, i32* %loc_r\n  %t1 = load i32, i32* %loc_r"
-
--- show (BrI exprReg lTrue lFalse) ++ show lTrue ++ ": \n" ++ trueCode ++ show (JmpI lEnd) ++ show lFalse ++ ":\n" ++ falseCode ++ show (JmpI lEnd) ++ show lEnd ++ ":\n"
-
 data ArtOp
   = AddOp
   | SubOp

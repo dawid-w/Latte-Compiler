@@ -9,16 +9,12 @@ import Types
 
 type Error = String
 
--- type RegNum = Int
-
 type Loc = Int
 
--- Ident -> Loc
 type VEnv = Map Ident Loc
 
 type PEnv = Map Ident CType
 
--- Loc -> Typ zmiennej, w jakim jest obecnie rejestrze
 type Store = Map Loc (CType, Var)
 
 type Env = (PEnv, VEnv, Store, Loc, Register, Label, Var)
@@ -53,13 +49,6 @@ addProc retType ident argsTypes = do
   (penv, venv, store, loc, reg, label, var) <- get
   put (Map.insert ident (CFun retType argsTypes) penv, venv, store, loc, reg, label, var)
   return ()
-
--- setVar :: CType -> Ident -> Compl Var
--- setVar varType ident = do
---   (penv, venv, store, loc, reg, label, var) <- get
---   let (Just varLoc) = Map.lookup ident venv
---   put (penv, venv, Map.insert varLoc (varType, var) store, loc, nextReg var, label, var)
---   return var
 
 useReg :: Compl Register
 useReg = do
