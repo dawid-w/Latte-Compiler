@@ -196,9 +196,9 @@ initVar varType ((Init pos ident expr) : items) = do
 compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 AddOp
 compileExpr (EAdd pos e1 (Minus posOp) e2) = compileBinExp e1 e2 SubOp
-compileExpr (EMul pos e1 (Times posOp) e2) = compileBinExp e1 e2 AddOp
-compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 AddOp
-compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 AddOp
+compileExpr (EMul pos e1 (Times posOp) e2) = compileBinExp e1 e2 MulOp
+compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 DivOp
+compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 ModOp
 compileExpr (ERel pos e1 op e2) = compileCmpExpr e1 e2 op
 compileExpr (ELitTrue pos) = do
   reg <- useReg

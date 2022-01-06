@@ -45,16 +45,22 @@ data BoolOp
 instance Show BoolOp where
   show AndOp = "and"
   show OrOp = "or"
-  show XorOp= "xor"
+  show XorOp = "xor"
 
 data ArtOp
   = AddOp
   | SubOp
+  | DivOp
+  | MulOp
+  | ModOp
   deriving (Eq)
 
 instance Show ArtOp where
   show AddOp = "add"
   show SubOp = "sub"
+  show DivOp = "sdiv"
+  show MulOp = "mul"
+  show ModOp = "srem"
 
 relOpToLLVM :: RelOp -> String
 relOpToLLVM (LTH _) = "slt"
