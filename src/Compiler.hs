@@ -125,8 +125,8 @@ compileStmt (Incr pos ident) = do
 compileStmt (Decr pos ident) = do
   compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Minus pos) (ELitInt pos 1)))
 compileStmt (Ret pos expr) = do
-  (reg, text, exprType, _) <- compileExpr expr
-  return (text ++ "ret " ++ show exprType ++ " " ++ show reg, "")
+  (reg, text, exprType, strDecl) <- compileExpr expr
+  return (text ++ "ret " ++ show exprType ++ " " ++ show reg, strDecl)
 compileStmt (VRet pos) = return ("", "")
 compileStmt (Cond pos expr stmt) = do
   (exprReg, exprText, exprType, _) <- compileExpr expr
