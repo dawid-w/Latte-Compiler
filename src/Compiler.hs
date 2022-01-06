@@ -85,7 +85,11 @@ compileDef :: TopDef -> Compl Result
 compileDef (FnDef pos retType (Ident name) args block) = do
   (argsStr, initStr) <- defArgs args
   (blockStr, strDecl) <- compileBlock block
-  return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "\n}\n"
+  case retType of
+    Void ma -> return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr  ++ "ret void\n}\n"
+    _ -> return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "\n}\n"
+
+  
 
 defArgs :: [Arg] -> Compl (String, String)
 defArgs [] = do return ("", "")
@@ -131,8 +135,11 @@ compileStmt (Decr pos ident) = do
   compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Minus pos) (ELitInt pos 1)))
 compileStmt (Ret pos expr) = do
   (reg, text, exprType, strDecl) <- compileExpr expr
-  return (text ++ "ret " ++ show exprType ++ " " ++ show reg, strDecl)
+  return (text ++ "ret " ++ show exprType ++ " " ++ show reg ++ "\n", strDecl)
 compileStmt (VRet pos) = return ("ret void\n", "")
+compileStmt (Cond pos (ELitTrue _) stmt) = do
+  compileStmt stmt
+compileStmt (Cond pos (ELitFalse _) stmt) = return ("", "")
 compileStmt (Cond pos expr stmt) = do
   (exprReg, exprText, exprType, _) <- compileExpr expr
   (stmtRes, _) <- compileStmt stmt
@@ -140,6 +147,8 @@ compileStmt (Cond pos expr stmt) = do
   labFalse <- useLabel
   labEnd <- useLabel
   return (exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmtRes ""), "")
+compileStmt (CondElse pos (ELitTrue _) stmt1 stmt2) = compileStmt stmt1
+compileStmt (CondElse pos (ELitFalse _) stmt1 stmt2) = compileStmt stmt2
 compileStmt (CondElse pos expr stmt1 stmt2) = do
   (exprReg, exprText, exprType, _) <- compileExpr expr
   (stmt1Res, _) <- compileStmt stmt1
