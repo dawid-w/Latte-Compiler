@@ -132,7 +132,7 @@ compileStmt (Decr pos ident) = do
 compileStmt (Ret pos expr) = do
   (reg, text, exprType, strDecl) <- compileExpr expr
   return (text ++ "ret " ++ show exprType ++ " " ++ show reg, strDecl)
-compileStmt (VRet pos) = return ("", "")
+compileStmt (VRet pos) = return ("ret void\n", "")
 compileStmt (Cond pos expr stmt) = do
   (exprReg, exprText, exprType, _) <- compileExpr expr
   (stmtRes, _) <- compileStmt stmt
