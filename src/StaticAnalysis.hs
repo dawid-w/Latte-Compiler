@@ -136,12 +136,9 @@ checkReturn :: [Stmt] -> CType -> Compl Bool
 checkReturn [] CVoid = return True
 checkReturn [] expectedType = return False
 checkReturn ((Ret pos expr) : stmts) expectedType = do
-  retType <- getExprType expr
-  if retType == expectedType
-    then do
-      res <- checkReturn stmts expectedType
-      return True
-    else printError pos $ "expedted " ++ show expectedType ++ " got " ++ show retType
+  assertExprType expr expectedType
+  checkReturn stmts expectedType
+  return True
 checkReturn ((VRet pos) : stmts) CVoid = do
   res <- checkReturn stmts CVoid
   return True
@@ -201,10 +198,7 @@ checkStmt retType (Ass pos ident expr) = do
 checkStmt retType (Incr pos ident) = assertVarType pos ident CInt
 checkStmt retType (Decr pos ident) = assertVarType pos ident CInt
 checkStmt retType (Ret pos expr) = do
-  r <- getExprType expr
-  if retType == r
-    then return ""
-    else printError pos $ "Function should return " ++ show retType
+  assertExprType expr retType
 checkStmt CVoid (VRet pos) = return ""
 checkStmt retType (VRet pos) = printError pos $ "Function should return " ++ show retType
 checkStmt retType (Cond pos expr stmt) = do
@@ -230,7 +224,7 @@ getExprType (ELitFalse pos) = return CBool
 getExprType (EOr pos e1 e2) = return CBool
 getExprType (EAnd pos e1 e2) = return CBool
 getExprType (ERel pos e1 op e2) = return CBool
-getExprType (EAdd pos e1 op e2) = return CInt
+getExprType (EAdd pos e1 op e2) = getExprType e1
 getExprType (EMul pos e1 op e2) = return CInt
 getExprType (Not pos expr) = return CBool
 getExprType (Neg pos expr) = return CInt
