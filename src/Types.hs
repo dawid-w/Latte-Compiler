@@ -16,14 +16,14 @@ getCType (Fun _ retType args) = CFun (getCType retType) (map getCType args)
 
 instance Show CType where
   show CInt = "i32"
-  show CStr = "string"
+  show CStr = "i8*"
   show CBool = "i1"
   show CVoid = "void"
   show (CFun _ _) = "function"
 
 typeToLLVM :: Type -> String
 typeToLLVM (Int _) = "i32"
-typeToLLVM (Str _) = "todo"
+typeToLLVM (Str _) = "i8*"
 typeToLLVM (Bool _) = "i1"
 typeToLLVM (Void _) = "void"
 typeToLLVM (Fun _ retType args) = "todo"

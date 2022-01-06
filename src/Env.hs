@@ -28,6 +28,7 @@ initEnv =
         (Ident "printString", CFun CVoid [CStr]),
         (Ident "error", CFun CVoid []),
         (Ident "readInt", CFun CInt []),
+        (Ident "concat", CFun CStr [CStr, CStr]),
         (Ident "readString", CFun CStr [])
       ],
     Map.empty,
