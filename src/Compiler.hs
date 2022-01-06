@@ -91,15 +91,13 @@ defArgs :: [Arg] -> Compl (String, String)
 defArgs [] = do return ("", "")
 defArgs [Arg pos argType ident] = do
   reg <- useReg
-  (initRes, s) <- initVar (getCType argType) [NoInit pos ident]
+  (initRes, _) <- initVar (getCType argType) [NoInit pos ident]
   var <- lastVar
   return (show (getCType argType) ++ " " ++ show reg, initRes ++ show (SetV var (getCType argType) reg))
-defArgs ((Arg pos argType ident) : args) = do
-  (argsStr, initStr) <- defArgs args
-  reg <- useReg
-  (initRes, s) <- initVar (getCType argType) [NoInit pos ident]
-  var <- lastVar
-  return (argsStr ++ ", " ++ show (getCType argType) ++ " " ++ show reg, initStr ++ initRes ++ show (SetV var (getCType argType) reg))
+defArgs (arg : args) = do
+  (argsStr, initStr) <- defArgs [arg]
+  (argsStrs, initStrs) <- defArgs args
+  return (argsStr ++ "," ++ argsStrs, initStr ++ initStrs)
 
 compileBlock :: Block -> Compl (Result, String)
 compileBlock (Block pos stmts) = compileStmts stmts
