@@ -61,7 +61,15 @@ compile program = do
           )
 
 compileProgram :: Program -> Compl Result
-compileProgram (Program pos topDefs) = compileDefs topDefs
+compileProgram (Program pos topDefs) = do
+  addDefs topDefs
+  compileDefs topDefs
+
+addDefs :: [TopDef] -> Compl ()
+addDefs [] = return ()
+addDefs ((FnDef pos retType (Ident name) args block) : defs) = do
+  _ <- addProc (getCType retType) (Ident name) (Prelude.map getArgCType args)
+  addDefs defs
 
 compileDefs :: [TopDef] -> Compl Result
 compileDefs [] = return ""
@@ -75,7 +83,6 @@ getArgCType (Arg pos argType ident) = getCType argType
 
 compileDef :: TopDef -> Compl Result
 compileDef (FnDef pos retType (Ident name) args block) = do
-  _ <- addProc (getCType retType) (Ident name) (Prelude.map getArgCType args)
   (argsStr, initStr) <- defArgs args
   (blockStr, strDecl) <- compileBlock block
   return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "\n}\n"
