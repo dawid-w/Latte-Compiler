@@ -40,8 +40,8 @@ main = do
               case compilerResult of
                 (Right generatedText) -> do
                   writeFile (outputDir ++ "/" ++ programName ++ ".ll") generatedText
-                  processHandle <- runCommand ("llvm-as " ++ outputPath)
-                  waitForProcess processHandle
+                  -- processHandle <- runCommand ("llvm-as " ++ outputPath)
+                  -- waitForProcess processHandle
                   putStrLn $ "Compiled: " ++ outputPath
                 (Left error) -> hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
               exitSuccess
