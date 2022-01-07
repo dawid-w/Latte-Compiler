@@ -180,19 +180,16 @@ initVar varType ((NoInit pos ident) : items) = do
       (rs, strDecl) <- initVar varType items
       return (rs ++ show (AddInit newVar varType), strDecl)
 initVar varType ((Init pos ident expr) : items) = do
+  (exprReg, exprText, exprType, declStr) <- compileExpr expr
+  newVar <- addVar varType ident
+  (varType, var) <- getVar ident
+  let r1 = exprText ++ show (SetV var varType exprReg)
+  let sExpr = declStr
+  (rs, ds1) <- initVar varType items
+  (r2, ds2) <- initVar varType items
   case varType of
-    CStr -> do
-      newVar <- addVar varType ident
-      (rs, ds1) <- initVar varType items
-      (r1, sExpr) <- compileStmt (Ass pos ident expr)
-      (r2, ds2) <- initVar varType items
-      return (rs ++ show (AddV newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
-    _ -> do
-      newVar <- addVar varType ident
-      (rs, ds1) <- initVar varType items
-      (r1, sExpr) <- compileStmt (Ass pos ident expr)
-      (r2, ds2) <- initVar varType items
-      return (rs ++ show (AddInit newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
+    CStr -> do return (rs ++ show (AddV newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
+    _ -> do return (rs ++ show (AddInit newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
 
 compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 AddOp
