@@ -219,10 +219,20 @@ compileExpr (EString pos str) = do
   return (reg, as, CStr, ds)
 compileExpr (Neg pos expr) = compileExpr (EAdd pos (ELitInt pos 0) (Minus pos) expr)
 compileExpr (EAnd pos e1 e2) = do
+  -- TODO: Simplify
   (reg1, text1, ctype1, _) <- compileExpr e1
-  (reg2, text2, ctype2, _) <- compileExpr e2
-  reg <- useReg
-  return (reg, text1 ++ text2 ++ show (BoolI reg AndOp (RegVal reg1) (RegVal reg2)), CBool, "")
+  labE1True <- useLabel
+  labE1False <- useLabel
+  labEnd <- useLabel
+  (Reg num) <- useReg
+  let ident = Ident $ "and" ++ show num
+  (varText, sd) <- initVar CBool [Init pos ident (ELitTrue pos)]
+  (setTrueText, _) <- compileStmt (Ass pos ident e2)
+  (setE2Text, _) <- compileStmt (Ass pos ident (ELitFalse pos))
+  let ifInstr = IfElseI reg1 labE1True labE1False labEnd setTrueText setE2Text
+  (ctype, var) <- getVar ident
+  res <- useReg
+  return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, "")
 compileExpr (EOr pos e1 e2) = do
   -- TODO: Simplify
   (reg1, text1, ctype1, _) <- compileExpr e1
