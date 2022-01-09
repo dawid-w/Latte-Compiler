@@ -246,9 +246,16 @@ assertExprType (EAnd pos e1 e2) CBool = do
   assertExprType e2 CBool
   return ""
 assertExprType (ERel pos e1 op e2) CBool = do
-  retType <- getExprType e1
-  assertExprType e1 retType
-  assertExprType e2 retType
+  t1 <- getExprType e1
+  t2 <- getExprType e2
+  if t1 == t2
+    then do
+      case t1 of
+        CStr -> printError (hasPosition op) "Cannot compare Strings"
+        CVoid -> printError (hasPosition op) "Cannot compare Voids"
+        CFun ct cts -> printError (hasPosition op) "Cannot compare Functions"
+        _ -> return ""
+    else printError (hasPosition op) $ "Cannot compare " ++ show t1 ++ " with " ++ show t2
 assertExprType (EAdd pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
