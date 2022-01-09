@@ -191,6 +191,7 @@ checkStmt retType (BStmt pos block) = do
   checkStmts retType stmts
   put env
   return ""
+checkStmt retType (Decl pos (Void vPos) items) = printError vPos "Cannot declare variable of type void"
 checkStmt retType (Decl pos varType items) =
   initVar pos (getCType varType) items
 checkStmt retType (Ass pos ident expr) = do
@@ -268,9 +269,10 @@ assertExprType (ERel pos e1 op e2) CBool = do
 assertExprType (EAdd pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
-assertExprType (EAdd pos e1 op e2) CStr = do
+assertExprType (EAdd pos e1 (Plus opPos) e2) CStr = do
   assertExprType e1 CStr
   assertExprType e2 CStr
+assertExprType (EAdd pos e1 (Minus opPos) e2) CStr = printError opPos "Cannot subtract string"
 assertExprType (EMul pos e1 op e2) CInt = do
   assertExprType e1 CInt
   assertExprType e2 CInt
