@@ -212,7 +212,6 @@ compileExpr (EString pos str) = do
   return (reg, asignCode, CStr, strDeclarations)
 compileExpr (Neg pos expr) = compileExpr (EAdd pos (ELitInt pos 0) (Minus pos) expr)
 compileExpr (EAnd pos e1 e2) = do
-  -- TODO: Simplify
   (reg1, text1, ctype1, _) <- compileExpr e1
   labE1True <- useLabel
   labE1False <- useLabel
@@ -227,7 +226,6 @@ compileExpr (EAnd pos e1 e2) = do
   res <- useNewReg
   return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, sd ++ sd2 ++ sd3)
 compileExpr (EOr pos e1 e2) = do
-  -- TODO: Simplify
   (reg1, text1, ctype1, _) <- compileExpr e1
   labE1True <- useLabel
   labE1False <- useLabel
@@ -270,7 +268,6 @@ compileBinExp e1 e2 op = do
 
 compileCmpExpr :: Expr -> Expr -> RelOp -> Compl ExprResult
 compileCmpExpr e1 e2 op = do
-  -- TODO: str cmp
   (reg1, code1, t1, strDeclarations1) <- compileExpr e1
   (reg2, code2, t2, strDeclarations2) <- compileExpr e2
   reg <- useNewReg
