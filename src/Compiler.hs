@@ -40,6 +40,7 @@ funcDeclarations =
     ++ "declare void @printString(i8* %x)\n"
     ++ "declare i32 @printf(i8*, ...)\n"
     ++ "declare i32 @scanf(i8*, ...)\n"
+    ++ "declare void @error()\n"
     ++ "declare i8* @concat(i8* %s1, i8* %s2)\n"
 
 compile :: Program -> IO (Either Error String)

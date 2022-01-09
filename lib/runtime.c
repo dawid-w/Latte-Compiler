@@ -46,3 +46,8 @@ char *concat(const char *str1, const char *str2)
     strncpy(ret + len1, str2, len2 + 1);
     return ret;
 }
+
+void error() {
+  printf("runtime error\n");
+  exit(1);
+}
