@@ -1,8 +1,8 @@
 
 all: 
-	cd src && ghc ./main.hs -o ../latc
+	cd src && ghc ./main.hs -o ../latc_llvm
 clean:
-	rm -f ./latc
+	rm -f ./latc_llvm
 	rm -f  src/*.hi
 	rm -f  src/*.o
 	rm -f good/*.bc

@@ -8,7 +8,7 @@ failed=0
 cd lib &&  clang -c -emit-llvm runtime.c && cd ..
 
 for filename in good/*.lat; do    
-    ./latc $filename > tmp.txt
+    ./latc_llvm $filename > tmp.txt
 
     if [[ $? != 0 ]]
     then

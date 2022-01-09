@@ -27,6 +27,7 @@ main = do
       code <- readFile filename
       let tokens = myLexer code
       let outputPath = replaceExtension filename ".ll"
+      let outFile = replaceExtension filename ".bc"
       let outputDir = takeDirectory outputPath
       let programName = dropExtension $ takeFileName filename
 
@@ -40,9 +41,11 @@ main = do
               case compilerResult of
                 (Right generatedText) -> do
                   writeFile (outputDir ++ "/" ++ programName ++ ".ll") generatedText
-                  -- processHandle <- runCommand ("llvm-as " ++ outputPath)
-                  -- waitForProcess processHandle
-                  putStrLn $ "Compiled: " ++ outputPath
+                  processHandle <- runCommand ("llvm-as " ++ outputPath)
+                  waitForProcess processHandle
+                  processHandle <- runCommand ("llvm-link -o " ++ outFile ++ " " ++ outFile ++ " lib/runtime.bc")
+                  waitForProcess processHandle
+                  putStrLn $ "Generated: " ++ outputPath ++ " and " ++ outFile
                 (Left error) -> hPutStrLn stderr $ "ERROR\n" ++ error ++ "\n"
               exitSuccess
             (Left error) -> do
