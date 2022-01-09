@@ -2,11 +2,13 @@ module Compiler where
 
 import Control.Monad.Except
 import Control.Monad.State
+import Data.Char (ord)
 import Data.Map as Map
 import Env
 import GHC.RTS.Flags (TraceFlags (user))
 import Instructions
 import Latte.Abs
+import Numeric
 import Types
 
 type LLVMCode = String
@@ -19,13 +21,14 @@ type InitArgsCode = String
 
 type ExprResult = (Register, LLVMCode, CType, StrDeclarations)
 
-indent :: String -> String
-indent str = "    " ++ indentH str
+pref :: String -> String
+pref str
+  | length str > 1 = str
+  | otherwise = "0" ++ str
 
-indentH :: [Char] -> [Char]
-indentH ('\n' : str) = "\n    " ++ indentH str
-indentH (c : str) = c : indentH str
-indentH [] = ""
+prepString :: [Char] -> [Char]
+prepString (c : str) = "\\" ++ pref (showHex (ord c) "") ++ prepString str
+prepString [] = ""
 
 funcDeclarations :: String
 funcDeclarations =
@@ -75,7 +78,7 @@ compileFuncDef :: TopDef -> Compl LLVMCode
 compileFuncDef (FnDef pos retType (Ident name) args block) = do
   (argsCode, initArgsCode) <- compileArgs args
   (blockCode, strDeclarations) <- compileBlock block
-  let blockCore = strDeclarations ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsCode ++ ") {\n" ++ indent initArgsCode ++ indent blockCode
+  let blockCore = strDeclarations ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsCode ++ ") {\n" ++ initArgsCode ++ blockCode
   case retType of
     Void _ -> return $ blockCore ++ "ret void\n}\n"
     Str _ -> return $ blockCore ++ "%_ = call i8* @malloc(i32 1)\n ret i8* %_\n\n}\n"
@@ -110,7 +113,7 @@ compileStmt (BStmt _ (Block _ stmts)) = do
   (blockCode, strDeclarations) <- compileStmts stmts
   (postPenv, postVenv, postStore, postLoc, postReg, postLabel, postVar) <- get
   put (penv, venv, postStore, loc, postReg, postLabel, postVar)
-  return ("\n " ++ indent blockCode ++ "\n", strDeclarations)
+  return ("\n " ++ blockCode ++ "\n", strDeclarations)
 compileStmt (Decl pos varType items) = initVar (getCType varType) items
 compileStmt (Ass pos ident expr) = do
   (exprReg, exprCode, _, strDeclarations) <- compileExpr expr
@@ -205,7 +208,7 @@ compileExpr (EString pos str) = do
   let (Reg num) = reg
   let len = length str + 1
   let asignCode = show reg ++ " = bitcast [" ++ show len ++ " x i8]* @s" ++ show num ++ " to i8*\n"
-  let strDeclarations = "@s" ++ show num ++ " = private constant [" ++ show len ++ " x i8] c\"" ++ str ++ "\\00\"\n"
+  let strDeclarations = "@s" ++ show num ++ " = private constant [" ++ show len ++ " x i8] c\"" ++ prepString str ++ "\\00\"\n"
   return (reg, asignCode, CStr, strDeclarations)
 compileExpr (Neg pos expr) = compileExpr (EAdd pos (ELitInt pos 0) (Minus pos) expr)
 compileExpr (EAnd pos e1 e2) = do
