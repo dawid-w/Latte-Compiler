@@ -9,11 +9,15 @@ import Instructions
 import Latte.Abs
 import Types
 
-type Result = String
+type LLVMCode = String
 
-type StrDecl = String
+type StrDeclarations = String
 
-type ExprResult = (Register, Result, CType, StrDecl)
+type ArgsCode = String
+
+type InitArgsCode = String
+
+type ExprResult = (Register, LLVMCode, CType, StrDeclarations)
 
 indent :: String -> String
 indent str = "    " ++ indentH str
@@ -23,159 +27,148 @@ indentH ('\n' : str) = "\n    " ++ indentH str
 indentH (c : str) = c : indentH str
 indentH [] = ""
 
+funcDeclarations :: String
+funcDeclarations =
+  "declare i32 @puts(i8*)\n"
+    ++ "declare i8* @readString()\n"
+    ++ "declare i32 @readInt()\n"
+    ++ "declare i8* @malloc(i32)\n"
+    ++ "declare i8* @strcat(i8*,i8*)\n"
+    ++ "declare i32 @strlen(i8*)\n"
+    ++ "declare i8* @strcpy(i8*,i8*)\n"
+    ++ "declare void @printInt(i32 %x)\n"
+    ++ "declare void @printString(i8* %x)\n"
+    ++ "declare i32 @printf(i8*, ...)\n"
+    ++ "declare i32 @scanf(i8*, ...)\n"
+    ++ "declare i8* @concat(i8* %s1, i8* %s2)\n"
+
 compile :: Program -> IO (Either Error String)
 compile program = do
   result <- runStateT (runExceptT (compileProgram program)) initEnv
   case fst result of
     (Left error) -> return $ Left error
-    (Right resultText) ->
-      return $
-        Right
-          ( "declare i32 @puts(i8*)\n"
-              ++ "declare i8* @readString()\n"
-              ++ "declare i32 @readInt()\n"
-              ++ "declare i8* @malloc(i32)\n"
-              ++ "declare i8* @strcat(i8*,i8*)\n"
-              ++ "declare i32 @strlen(i8*)\n"
-              ++ "declare i8* @strcpy(i8*,i8*)\n"
-              ++ "declare void @printInt(i32 %x)\n"
-              ++ "declare void @printString(i8* %x)\n"
-              ++ "declare i32 @printf(i8*, ...)\n"
-              ++ "declare i32 @scanf(i8*, ...)\n"
-              ++ "declare i8* @concat(i8* %s1, i8* %s2)\n"
-              ++ resultText
-              ++ "\n"
-          )
+    (Right resultText) -> return $ Right (funcDeclarations ++ resultText)
 
-compileProgram :: Program -> Compl Result
+compileProgram :: Program -> Compl LLVMCode
 compileProgram (Program pos topDefs) = do
-  addDefs topDefs
-  compileDefs topDefs
+  addFuncDefinition topDefs
+  compileFuncDefs topDefs
 
-addDefs :: [TopDef] -> Compl ()
-addDefs [] = return ()
-addDefs ((FnDef pos retType (Ident name) args block) : defs) = do
+addFuncDefinition :: [TopDef] -> Compl ()
+addFuncDefinition [] = return ()
+addFuncDefinition ((FnDef pos retType (Ident name) args block) : defs) = do
   _ <- addProc (getCType retType) (Ident name) (Prelude.map getArgCType args)
-  addDefs defs
+  addFuncDefinition defs
 
-compileDefs :: [TopDef] -> Compl Result
-compileDefs [] = return ""
-compileDefs (def : defs) = do
-  resultText1 <- compileDef def
-  resultText2 <- compileDefs defs
-  return $ resultText1 ++ resultText2
+compileFuncDefs :: [TopDef] -> Compl LLVMCode
+compileFuncDefs [] = return ""
+compileFuncDefs (def : defs) = do
+  llvmCode1 <- compileFuncDef def
+  llvmCode2 <- compileFuncDefs defs
+  return $ llvmCode1 ++ llvmCode2
 
 getArgCType :: Arg -> CType
 getArgCType (Arg pos argType ident) = getCType argType
 
-compileDef :: TopDef -> Compl Result
-compileDef (FnDef pos retType (Ident name) args block) = do
-  (argsStr, initStr) <- defArgs args
-  (blockStr, strDecl) <- compileBlock block
+compileFuncDef :: TopDef -> Compl LLVMCode
+compileFuncDef (FnDef pos retType (Ident name) args block) = do
+  (argsCode, initArgsCode) <- compileArgs args
+  (blockCode, strDeclarations) <- compileBlock block
+  let blockCore = strDeclarations ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsCode ++ ") {\n" ++ indent initArgsCode ++ indent blockCode
   case retType of
-    Void _ -> return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "ret void\n}\n"
-    Str _ -> return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "%_ = call i8* @malloc(i32 1)\n ret i8* %_\n\n}\n"
-    _ -> return $ strDecl ++ "\ndefine " ++ typeToLLVM retType ++ " @" ++ name ++ "(" ++ argsStr ++ ") {\n" ++ initStr ++ indent blockStr ++ "ret " ++ typeToLLVM retType ++ " 0\n}\n"
+    Void _ -> return $ blockCore ++ "ret void\n}\n"
+    Str _ -> return $ blockCore ++ "%_ = call i8* @malloc(i32 1)\n ret i8* %_\n\n}\n"
+    _ -> return $ blockCore ++ "ret " ++ typeToLLVM retType ++ " 0\n}\n"
 
-defArgs :: [Arg] -> Compl (String, String)
-defArgs [] = do return ("", "")
-defArgs [Arg pos argType ident] = do
-  reg <- useReg
-  (initRes, _) <- initVar (getCType argType) [NoInit pos ident]
+compileArgs :: [Arg] -> Compl (ArgsCode, InitArgsCode)
+compileArgs [] = do return ("", "")
+compileArgs [Arg pos argType ident] = do
+  reg <- useNewReg
+  (initCode, _) <- initVar (getCType argType) [NoInit pos ident]
   var <- lastVar
-  return (show (getCType argType) ++ " " ++ show reg, initRes ++ show (SetV var (getCType argType) reg))
-defArgs (arg : args) = do
-  (argsStr, initStr) <- defArgs [arg]
-  (argsStrs, initStrs) <- defArgs args
-  return (argsStr ++ "," ++ argsStrs, initStr ++ initStrs)
+  return (show (getCType argType) ++ " " ++ show reg, initCode ++ show (SetV var (getCType argType) reg))
+compileArgs (arg : args) = do
+  (argCode, initArgCode) <- compileArgs [arg]
+  (argsCode, initArgsCode) <- compileArgs args
+  return (argCode ++ "," ++ argsCode, initArgCode ++ initArgsCode)
 
-compileBlock :: Block -> Compl (Result, String)
+compileBlock :: Block -> Compl (LLVMCode, StrDeclarations)
 compileBlock (Block pos stmts) = compileStmts stmts
 
-compileStmts :: [Stmt] -> Compl (Result, String)
+compileStmts :: [Stmt] -> Compl (LLVMCode, StrDeclarations)
 compileStmts [] = do return ("", "")
 compileStmts (stmt : stmts) = do
-  (r1, s1) <- compileStmt stmt
-  (r2, s2) <- compileStmts stmts
-  return (r1 ++ r2, s1 ++ s2)
+  (stmtCode, strDeclarations1) <- compileStmt stmt
+  (stmtsCode, strDeclarations2) <- compileStmts stmts
+  return (stmtCode ++ stmtsCode, strDeclarations1 ++ strDeclarations2)
 
-compileStmt :: Stmt -> Compl (Result, String)
+compileStmt :: Stmt -> Compl (LLVMCode, StrDeclarations)
 compileStmt (Empty pos) = do return ("", "")
-compileStmt (BStmt pos block) = do
+compileStmt (BStmt _ (Block _ stmts)) = do
   (penv, venv, store, loc, reg, label, var) <- get
-  let (Block pos stmts) = block
-  (blockText, strDecl) <- compileStmts stmts
+  (blockCode, strDeclarations) <- compileStmts stmts
   (postPenv, postVenv, postStore, postLoc, postReg, postLabel, postVar) <- get
   put (penv, venv, postStore, loc, postReg, postLabel, postVar)
-  return ("\n " ++ indent blockText ++ "\n\n", strDecl)
-compileStmt (Decl pos varType items) = do
-  (r, s) <- initVar (getCType varType) items
-  return (r, s)
+  return ("\n " ++ indent blockCode ++ "\n", strDeclarations)
+compileStmt (Decl pos varType items) = initVar (getCType varType) items
 compileStmt (Ass pos ident expr) = do
-  (exprReg, exprText, exprType, declStr) <- compileExpr expr
+  (exprReg, exprCode, _, strDeclarations) <- compileExpr expr
   (varType, var) <- getVar ident
-  return (exprText ++ show (SetV var varType exprReg), declStr)
-compileStmt (Incr pos ident) = do
-  compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Plus pos) (ELitInt pos 1)))
-compileStmt (Decr pos ident) = do
-  compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Minus pos) (ELitInt pos 1)))
+  return (exprCode ++ show (SetV var varType exprReg), strDeclarations)
+compileStmt (Incr pos ident) = compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Plus pos) (ELitInt pos 1)))
+compileStmt (Decr pos ident) = compileStmt (Ass pos ident (EAdd pos (EVar pos ident) (Minus pos) (ELitInt pos 1)))
 compileStmt (Ret pos expr) = do
-  (reg, text, exprType, strDecl) <- compileExpr expr
-  return (text ++ "ret " ++ show exprType ++ " " ++ show reg ++ "\n", strDecl)
-compileStmt (VRet pos) = return ("ret void\n", "")
-compileStmt (Cond pos (ELitTrue _) stmt) = do
-  compileStmt stmt
-compileStmt (Cond pos (ELitFalse _) stmt) = return ("", "")
-compileStmt (Cond pos expr stmt) = do
-  (exprReg, exprText, exprType, _) <- compileExpr expr
-  (stmtRes, ds) <- compileStmt stmt
+  (exprReg, exprCode, exprType, strDeclarations) <- compileExpr expr
+  return (exprCode ++ show (RetI exprType exprReg), strDeclarations)
+compileStmt (VRet _) = return (show VRetI, "")
+compileStmt (Cond _ (ELitTrue _) stmt) = compileStmt stmt
+compileStmt (Cond _ (ELitFalse _) stmt) = return ("", "")
+compileStmt (Cond _ expr stmt) = do
+  (exprReg, exprCode, exprType, strDeclarations1) <- compileExpr expr
+  (stmtCode, strDeclarations2) <- compileStmt stmt
   labTrue <- useLabel
   labFalse <- useLabel
   labEnd <- useLabel
-  return (exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmtRes ""), ds)
-compileStmt (CondElse pos (ELitTrue _) stmt1 stmt2) = compileStmt stmt1
-compileStmt (CondElse pos (ELitFalse _) stmt1 stmt2) = compileStmt stmt2
-compileStmt (CondElse pos expr stmt1 stmt2) = do
-  (exprReg, exprText, exprType, _) <- compileExpr expr
-  (stmt1Res, ds1) <- compileStmt stmt1
-  (stmt2Res, ds2) <- compileStmt stmt2
+  return (exprCode ++ show (IfElseI exprReg labTrue labFalse labEnd stmtCode ""), strDeclarations1 ++ strDeclarations2)
+compileStmt (CondElse _ (ELitTrue _) stmt1 stmt2) = compileStmt stmt1
+compileStmt (CondElse _ (ELitFalse _) stmt1 stmt2) = compileStmt stmt2
+compileStmt (CondElse _ expr stmt1 stmt2) = do
+  (exprReg, exprCode, exprType, strDeclarations1) <- compileExpr expr
+  (stmt1Res, strDeclarations2) <- compileStmt stmt1
+  (stmt2Res, strDeclarations3) <- compileStmt stmt2
   labTrue <- useLabel
   labFalse <- useLabel
   labEnd <- useLabel
-  return (exprText ++ show (IfElseI exprReg labTrue labFalse labEnd stmt1Res stmt2Res), ds1 ++ ds2)
+  return (exprCode ++ show (IfElseI exprReg labTrue labFalse labEnd stmt1Res stmt2Res), strDeclarations1 ++ strDeclarations2 ++ strDeclarations3)
 compileStmt (While pos expr stmt) = do
-  (exprReg, exprText, exprType, _) <- compileExpr expr
-  (stmtRes, _) <- compileStmt stmt
+  (exprReg, exprCode, exprType, strDeclarations1) <- compileExpr expr
+  (stmtRes, strDeclarations2) <- compileStmt stmt
   labCheck <- useLabel
   labTrue <- useLabel
   labEnd <- useLabel
-  return (show (WhileI exprReg exprText labCheck labTrue labEnd stmtRes), "")
+  return (show (WhileI exprReg exprCode labCheck labTrue labEnd stmtRes), strDeclarations1 ++ strDeclarations2)
 compileStmt (SExp pos expr) = do
-  (reg, text, retType, strDecl) <- compileExpr expr
-  return (text, strDecl)
+  (_, code, _, strDeclarations) <- compileExpr expr
+  return (code, strDeclarations)
 
-initVar :: CType -> [Item] -> Compl (Result, StrDecl)
+initVar :: CType -> [Item] -> Compl (LLVMCode, StrDeclarations)
 initVar varType [] = do return ("", "")
 initVar varType ((NoInit pos ident) : items) = do
   newVar <- addVar varType ident
+  (varCode, strDeclarations) <- initVar varType items
+  let declCode = show (AddV newVar varType)
   case varType of
-    CStr -> do
-      (rs, strDecl) <- initVar varType items
-      return (rs ++ show (AddV newVar varType), strDecl)
-    _ -> do
-      (rs, strDecl) <- initVar varType items
-      return (rs ++ show (AddInit newVar varType), strDecl)
+    CStr -> return (varCode ++ declCode, strDeclarations)
+    _ -> return (varCode ++ declCode ++ show (InitI newVar varType), strDeclarations)
 initVar varType ((Init pos ident expr) : items) = do
-  (exprReg, exprText, exprType, declStr) <- compileExpr expr
+  (exprReg, exprCode, _, strDeclarations1) <- compileExpr expr
   newVar <- addVar varType ident
-  (varType, var) <- getVar ident
-  let r1 = exprText ++ show (SetV var varType exprReg)
-  let sExpr = declStr
-  (rs, ds1) <- initVar varType items
-  (r2, ds2) <- initVar varType items
+  let initCode = exprCode ++ show (SetV newVar varType exprReg)
+  (varsCode, strDeclarations2) <- initVar varType items
+  let declCode = show (AddV newVar varType)
   case varType of
-    CStr -> do return (rs ++ show (AddV newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
-    _ -> do return (rs ++ show (AddInit newVar varType) ++ r1 ++ r2, ds1 ++ ds2 ++ sExpr)
+    CStr -> return (varsCode ++ declCode ++ initCode, strDeclarations1 ++ strDeclarations2)
+    _ -> return (varsCode ++ declCode ++ show (InitI newVar varType) ++ initCode, strDeclarations1 ++ strDeclarations2)
 
 compileExpr :: Expr -> Compl ExprResult
 compileExpr (EAdd pos e1 (Plus posOp) e2) = compileBinExp e1 e2 AddOp
@@ -185,38 +178,34 @@ compileExpr (EMul pos e1 (Div posOp) e2) = compileBinExp e1 e2 DivOp
 compileExpr (EMul pos e1 (Mod posOp) e2) = compileBinExp e1 e2 ModOp
 compileExpr (ERel pos e1 op e2) = compileCmpExpr e1 e2 op
 compileExpr (ELitTrue pos) = do
-  reg <- useReg
+  reg <- useNewReg
   return (reg, show reg ++ " = " ++ "or i1 1,1" ++ "\n", CBool, "")
 compileExpr (ELitFalse pos) = do
-  reg <- useReg
+  reg <- useNewReg
   return (reg, show reg ++ " = " ++ "or i1 0,0" ++ "\n", CBool, "")
 compileExpr (ELitInt pos num) = do
-  reg <- useReg
+  reg <- useNewReg
   return (reg, show reg ++ " = " ++ "or" ++ " i32 " ++ "0," ++ show num ++ "\n", CInt, "")
 compileExpr (EVar pos ident) = do
-  varReg <- useReg
-  resReg <- useReg
+  resultReg <- useNewReg
   (varType, var) <- getVar ident
   case varType of
-    CInt -> return (resReg, show (GetV var varType varReg) ++ show resReg ++ " = or i32 0, " ++ show varReg ++ "\n", CInt, "")
-    CBool -> return (resReg, show (GetV var varType varReg) ++ show resReg ++ " = or i1 0, " ++ show varReg ++ "\n", CBool, "")
-    CStr -> return (varReg, show (GetV var varType varReg), CStr, "")
-    _ -> return (Reg 0, "", CVoid, "")
+    CVoid -> return (Reg 0, "", CVoid, "")
+    _ -> return (resultReg, show (GetV var varType resultReg), varType, "")
 compileExpr (EApp pos (Ident name) exprs) = do
-  (argStr, compileStr, ds) <- compileArgsExpr exprs
+  (argStr, compileStr, strDeclarations) <- compileArgsExpr exprs
   (retType, argsTypes) <- getProc $ Ident name
+  reg <- useNewReg
   case retType of
-    CVoid -> do return (Reg 0, compileStr ++ "call void @" ++ name ++ "(" ++ argStr ++ ")\n", CVoid, ds)
-    _ -> do
-      reg <- useReg
-      return (reg, compileStr ++ show reg ++ " = call " ++ show retType ++ " @" ++ name ++ "(" ++ argStr ++ ")\n", retType, ds)
+    CVoid -> return (reg, compileStr ++ "call void @" ++ name ++ "(" ++ argStr ++ ")\n", CVoid, strDeclarations)
+    _ -> return (reg, compileStr ++ show reg ++ " = call " ++ show retType ++ " @" ++ name ++ "(" ++ argStr ++ ")\n", retType, strDeclarations)
 compileExpr (EString pos str) = do
-  reg <- useReg
+  reg <- useNewReg
   let (Reg num) = reg
   let len = length str + 1
-  let as = show reg ++ " = bitcast [" ++ show len ++ " x i8]* @s" ++ show num ++ " to i8*\n"
-  let ds = "@s" ++ show num ++ " = private constant [" ++ show len ++ " x i8] c\"" ++ str ++ "\\00\"\n"
-  return (reg, as, CStr, ds)
+  let asignCode = show reg ++ " = bitcast [" ++ show len ++ " x i8]* @s" ++ show num ++ " to i8*\n"
+  let strDeclarations = "@s" ++ show num ++ " = private constant [" ++ show len ++ " x i8] c\"" ++ str ++ "\\00\"\n"
+  return (reg, asignCode, CStr, strDeclarations)
 compileExpr (Neg pos expr) = compileExpr (EAdd pos (ELitInt pos 0) (Minus pos) expr)
 compileExpr (EAnd pos e1 e2) = do
   -- TODO: Simplify
@@ -224,62 +213,61 @@ compileExpr (EAnd pos e1 e2) = do
   labE1True <- useLabel
   labE1False <- useLabel
   labEnd <- useLabel
-  (Reg num) <- useReg
+  (Reg num) <- useNewReg
   let ident = Ident $ "and" ++ show num
   (varText, sd) <- initVar CBool [Init pos ident (ELitTrue pos)]
-  (setTrueText, _) <- compileStmt (Ass pos ident e2)
-  (setE2Text, _) <- compileStmt (Ass pos ident (ELitFalse pos))
+  (setTrueText, sd2) <- compileStmt (Ass pos ident e2)
+  (setE2Text, sd3) <- compileStmt (Ass pos ident (ELitFalse pos))
   let ifInstr = IfElseI reg1 labE1True labE1False labEnd setTrueText setE2Text
   (ctype, var) <- getVar ident
-  res <- useReg
-  return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, "")
+  res <- useNewReg
+  return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, sd ++ sd2 ++ sd3)
 compileExpr (EOr pos e1 e2) = do
   -- TODO: Simplify
   (reg1, text1, ctype1, _) <- compileExpr e1
   labE1True <- useLabel
   labE1False <- useLabel
   labEnd <- useLabel
-  (Reg num) <- useReg
+  (Reg num) <- useNewReg
   let ident = Ident $ "or" ++ show num
-  (varText, sd) <- initVar CBool [Init pos ident (ELitFalse pos)]
-  (setTrueText, _) <- compileStmt (Ass pos ident (ELitTrue pos))
-  (setE2Text, _) <- compileStmt (Ass pos ident e2)
+  (varText, sd1) <- initVar CBool [Init pos ident (ELitFalse pos)]
+  (setTrueText, sd2) <- compileStmt (Ass pos ident (ELitTrue pos))
+  (setE2Text, sd3) <- compileStmt (Ass pos ident e2)
   let ifInstr = IfElseI reg1 labE1True labE1False labEnd setTrueText setE2Text
   (ctype, var) <- getVar ident
-  res <- useReg
-  return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, "")
+  res <- useNewReg
+  return (res, varText ++ text1 ++ show ifInstr ++ show (GetV var ctype res), CBool, sd1 ++ sd2 ++ sd3)
 compileExpr (Not pos expr) = do
-  (exprReg, text, ctype, _) <- compileExpr expr
-  reg <- useReg
-  return (reg, text ++ show (BoolI reg XorOp (IntVal 1) (RegVal exprReg)), CBool, "")
+  (exprReg, code, ctype, strDeclarations) <- compileExpr expr
+  reg <- useNewReg
+  return (reg, code ++ show (BoolI reg XorOp (IntVal 1) (RegVal exprReg)), CBool, strDeclarations)
 
 compileArgsExpr :: [Expr] -> Compl (String, String, String)
 compileArgsExpr [] = return ("", "", "")
 compileArgsExpr [expr] = do
-  (reg, text, ctype, ds) <- compileExpr expr
-  return (show ctype ++ " " ++ show reg, text, ds)
+  (reg, exprCode, ctype, strDeclarations) <- compileExpr expr
+  return (show ctype ++ " " ++ show reg, exprCode, strDeclarations)
 compileArgsExpr (expr : exprs) = do
-  (reg, text, ctype, ds) <- compileExpr expr
-  (argStr, compileStr, dss) <- compileArgsExpr exprs
-  return (show ctype ++ " " ++ show reg ++ "," ++ argStr, text ++ compileStr, ds ++ dss)
+  (reg, exprCode, ctype, strDeclarations1) <- compileExpr expr
+  (argStr, argsCode, strDeclarations2) <- compileArgsExpr exprs
+  return (show ctype ++ " " ++ show reg ++ "," ++ argStr, exprCode ++ argsCode, strDeclarations1 ++ strDeclarations2)
 
 compileBinExp :: Expr -> Expr -> ArtOp -> Compl ExprResult
 compileBinExp e1 e2 op = do
-  (reg1, result1, t1, _) <- compileExpr e1
-  case t1 of
+  (exprReg1, exprCode1, e1Type, strDeclarations1) <- compileExpr e1
+  (exprReg2, exprCode2, e2Type, strDeclarations2) <- compileExpr e2
+  case e1Type of
     CStr -> do
-      (rr, resr, tr, concatDeclStr) <- compileExpr (EApp (Just (0, 0)) (Ident "concat") [e1, e2])
-      return (rr, resr, CStr, concatDeclStr)
+      (resultReg, resultCode, _, strDeclarations3) <- compileExpr (EApp (Just (0, 0)) (Ident "concat") [e1, e2])
+      return (resultReg, resultCode, CStr, strDeclarations1 ++ strDeclarations2 ++ strDeclarations3)
     _ -> do
-      (reg1, result1, t1, declStr1) <- compileExpr e1
-      (reg2, result2, t2, declStr2) <- compileExpr e2
-      reg <- useReg
-      return (reg, result1 ++ result2 ++ show (ArtI op (RegVal reg1) (RegVal reg2) reg), t1, declStr1 ++ declStr2)
+      reg <- useNewReg
+      return (reg, exprCode1 ++ exprCode2 ++ show (ArtI op (RegVal exprReg1) (RegVal exprReg2) reg), e1Type, strDeclarations1 ++ strDeclarations2)
 
 compileCmpExpr :: Expr -> Expr -> RelOp -> Compl ExprResult
 compileCmpExpr e1 e2 op = do
   -- TODO: str cmp
-  (reg1, result1, t1, _) <- compileExpr e1
-  (reg2, result2, t2, _) <- compileExpr e2
-  reg <- useReg
-  return (reg, result1 ++ result2 ++ show (CmpI op t1 (RegVal reg1) (RegVal reg2) reg), CBool, "")
+  (reg1, code1, t1, strDeclarations1) <- compileExpr e1
+  (reg2, code2, t2, strDeclarations2) <- compileExpr e2
+  reg <- useNewReg
+  return (reg, code1 ++ code2 ++ show (CmpI op t1 (RegVal reg1) (RegVal reg2) reg), CBool, strDeclarations1 ++ strDeclarations2)

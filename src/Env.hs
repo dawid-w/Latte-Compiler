@@ -51,8 +51,8 @@ addProc retType ident argsTypes = do
   put (Map.insert ident (CFun retType argsTypes) penv, venv, store, loc, reg, label, var)
   return ()
 
-useReg :: Compl Register
-useReg = do
+useNewReg :: Compl Register
+useNewReg = do
   (penv, venv, store, loc, reg, label, var) <- get
   put (penv, venv, store, loc, nextReg reg, label, var)
   return reg
