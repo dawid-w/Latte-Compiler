@@ -4,7 +4,7 @@ make
 clear
 
 for filename in good/*.lat; do    
-    ./latc $filename &> tmp.txt
+    ./latc_llvm $filename &> tmp.txt
     status=$?    
 
     if [[ $status != 0 ]]

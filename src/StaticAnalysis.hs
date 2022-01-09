@@ -1,5 +1,6 @@
 module StaticAnalysis where
 
+import qualified Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Map as Map (Map, fromList, insert, lookup, toList)
@@ -71,7 +72,7 @@ checkProgram (Program pos topDefs) = do
   case Map.lookup (Ident "main") env of
     Nothing -> printError Nothing "No main function"
     Just (CFun CInt [], _) -> return ""
-    Just (CFun CInt x, _) -> printError Nothing $ "Main should not have any arguments"
+    Just (CFun CInt x, _) -> printError Nothing "Main should not have any arguments"
     Just (CFun retType _, _) -> printError Nothing $ "Main needs to return int, not " ++ show retType
     Just (r, _) -> printError Nothing "Main needs to be a function"
 
@@ -148,7 +149,7 @@ checkReturn ((Cond pos (ELitTrue _) stmt) : stmts) expectedType = do
   r1 <- checkReturn [stmt] expectedType
   r2 <- checkReturn stmts expectedType
   return (r1 || r2)
-checkReturn ((Cond pos expr stmt) : stmts) expectedType = do
+checkReturn ((Cond pos expr stmt) : stmts) expectedType =
   checkReturn stmts expectedType
 checkReturn ((CondElse pos (ELitFalse _) stmt1 stmt2) : stmts) expectedType = do
   r2 <- checkReturn [stmt2] expectedType
@@ -162,12 +163,12 @@ checkReturn ((CondElse pos expr stmt1 stmt2) : stmts) expectedType = do
   r1 <- checkReturn [stmt1] expectedType
   r2 <- checkReturn [stmt2] expectedType
   r3 <- checkReturn stmts expectedType
-  return ((r1 && r2) || r3)
+  return (r1 && r2 || r3)
 checkReturn ((While pos (ELitTrue _) stmt) : stmts) expectedType = do
   r1 <- checkReturn [stmt] expectedType
   r2 <- checkReturn stmts expectedType
   return (r1 || r2)
-checkReturn ((While pos expr stmt) : stmts) expectedType = do
+checkReturn ((While pos expr stmt) : stmts) expectedType =
   checkReturn stmts expectedType
 checkReturn ((BStmt pos block) : stmts) expectedType = do
   let (Block pos bStmts) = block
@@ -197,7 +198,7 @@ checkStmt retType (Ass pos ident expr) = do
   assertExprType expr varType
 checkStmt retType (Incr pos ident) = assertVarType pos ident CInt
 checkStmt retType (Decr pos ident) = assertVarType pos ident CInt
-checkStmt retType (Ret pos expr) = do
+checkStmt retType (Ret pos expr) =
   assertExprType expr retType
 checkStmt CVoid (VRet pos) = return ""
 checkStmt retType (VRet pos) = printError pos $ "Function should return " ++ show retType
@@ -215,10 +216,16 @@ checkStmt retType (SExp pos expr) = do
   expType <- getExprType expr
   assertExprType expr expType
 
+checkIfIntOverflow :: Integer -> Pos -> Compl ()
+checkIfIntOverflow num pos =
+  Control.Monad.when (num > 2147483647) $ printError pos "Integer overflow "
+
 getExprType :: Expr -> Compl CType
 getExprType (EVar pos ident) =
   assertDecl pos ident
-getExprType (ELitInt pos _) = return CInt
+getExprType (ELitInt pos num) = do
+  checkIfIntOverflow num pos
+  return CInt
 getExprType (ELitTrue pos) = return CBool
 getExprType (ELitFalse pos) = return CBool
 getExprType (EOr pos e1 e2) = return CBool
@@ -235,7 +242,9 @@ getExprType (EApp pos ident exprs) = do
 
 assertExprType :: Expr -> CType -> Compl Val
 assertExprType (EVar pos ident) exprType = assertVarType pos ident exprType
-assertExprType (ELitInt pos _) CInt = return ""
+assertExprType (ELitInt pos num) CInt = do
+  checkIfIntOverflow num pos
+  return ""
 assertExprType (ELitTrue pos) CBool = return ""
 assertExprType (ELitFalse pos) CBool = return ""
 assertExprType (EOr pos e1 e2) CBool = do
