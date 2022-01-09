@@ -1,7 +1,6 @@
 #!/bin/bash
 
 make
-clear
 
 pass=0
 failed=0
@@ -56,7 +55,9 @@ for filename in good/*.lat; do
     rm -f out.bc
 done
 
+make clean
 
 echo "--------------- Results ---------------"
 echo "Pass:     $pass"
 echo "Failed:   $failed"
+

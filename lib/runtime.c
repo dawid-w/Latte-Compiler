@@ -1,3 +1,6 @@
+// @Author - bartoszwjn
+// https://github.com/bartoszwjn/lattec/blob/master/lib/runtime.c
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
