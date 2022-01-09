@@ -4,7 +4,7 @@
 ### Usage:
 ```
 make                            # build
-./latc program.lat              # compile
+./latc_llvm program.lat         # compile -> generates .ll and .bc files
 ```
 
 ### Project structure:
